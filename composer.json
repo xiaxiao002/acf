@@ -1,0 +1,19 @@
+{
+	"name": "xiaxiao002/acf",
+	"description": "",
+	"keywords": [
+		"wordpress",
+		"plugin"
+	],
+	"homepage":"https://github.com/xiaxiao002/acf",
+	"authors": [
+		{
+		"name": "acf",
+		"homepage":"https://eileenlue.com"
+		}
+	],
+	"type": "wordpress-plugin",
+	"require": {
+		"php": ">5.6"
+	}
+}
