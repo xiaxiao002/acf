@@ -1,206 +1,409 @@
 <?php
 
-if(!defined('ABSPATH'))
-    exit;
+/*
+*  ACF Taxonomy Form Class
+*
+*  All the logic for adding fields to taxonomy terms
+*
+*  @class       acf_form_taxonomy
+*  @package     ACF
+*  @subpackage  Forms
+*/
 
-if(!class_exists('acfe_screen_taxonomy')):
+if ( ! class_exists( 'acf_form_taxonomy' ) ) :
 
-class acfe_screen_taxonomy{
-    
-    // vars
-    var $taxonomy;
-    
-    /*
-     * Construct
-     */
-    function __construct(){
-    
-        /*
-         * acfe/load_term               $taxonomy, $term_id
-         * acfe/add_term_meta_boxes     $taxonomy, $term
-         *
-         * acfe/load_terms              $taxonomy
-         * acfe/add_terms_meta_boxes    $taxonomy
-         */
-    
-        // edit
-        add_action('load-term.php',         array($this, 'term_load'));
-    
-        // list
-        add_action('load-edit-tags.php',    array($this, 'terms_load'));
-        
-    }
-    
-    /*
-     * Term: Load
-     */
-    function term_load(){
-        
-        // global
-        global $taxnow;
-        
-        // vars
-        $taxonomy = $taxnow;
-        $term_id = (int) acfe_get_post_id(false);
-    
-        // set vars
-        $this->taxonomy = $taxonomy;
-        
-        // actions
-        do_action("acfe/load_term",                         $taxonomy, $term_id);
-        do_action("acfe/load_term/taxonomy={$taxonomy}",    $taxonomy, $term_id);
-        
-        // hooks
-        add_action("{$taxonomy}_term_edit_form_top",    array($this, 'add_term_meta_boxes'), 10, 2);
-        add_action("{$taxonomy}_edit_form",             array($this, 'do_term_meta_boxes'), 10, 2);
-        
-    }
-    
-    /*
-     * Term: Meta Boxes
-     */
-    function add_term_meta_boxes($term, $taxonomy){
-        
-        do_action("acfe/add_term_meta_boxes",                       $taxonomy, $term);
-        do_action("acfe/add_term_meta_boxes/taxonomy={$taxonomy}",  $taxonomy, $term);
-        
-        // enhanced ui
-        if(acf_get_setting('acfe/modules/ui')){
-            
-            do_meta_boxes(get_current_screen(), 'acf_after_title', $term);
-            
-        }
-        
-    }
-    
-    /*
-     * Term: Do Meta Boxes
-     */
-    function do_term_meta_boxes($term, $taxonomy){
-    
-        // enhanced ui
-        if(acf_get_setting('acfe/modules/ui')){
-    
-            $screen = get_current_screen();
-            
-            do_meta_boxes($screen, 'normal', $term);
-            do_meta_boxes($screen, 'side', $term);
-            
-        }
-        
-    }
-    
-    /*
-     * Terms: Load
-     */
-    function terms_load(){
-        
-        // global
-        global $pagenow, $taxnow;
-        
-        // validate (wordpress also load this hook on term.php)
-        if($pagenow !== 'edit-tags.php'){
-            return;
-        }
-        
-        // vars
-        $taxonomy = $taxnow;
-    
-        // set vars
-        $this->taxonomy = $taxonomy;
-        
-        // actions
-        do_action("acfe/load_terms",                        $taxonomy);
-        do_action("acfe/load_terms/taxonomy={$taxonomy}",   $taxonomy);
-    
-        // hooks
-        add_action('admin_footer', array($this, 'terms_footer'));
-        
-    }
-    
-    /*
-     * Terms: Admin Footer
-     */
-    function terms_footer(){
-        
-        do_action('acfe/add_terms_meta_boxes', $this->taxonomy);
-    
-        $this->terms_do_meta_boxes();
-        
-    }
-    
-    /*
-     * Terms: Do Meta Boxes
-     */
-    function terms_do_meta_boxes(){
-        
-        // check filter
-        if(!acf_is_filter_enabled('acfe/taxonomy_list')){
-            return;
-        }
-        
-        ?>
-        <template id="tmpl-acf-after-title">
-            
-            <div id="poststuff" class="acfe-list-postboxes">
-                <form method="post">
-                    <?php do_meta_boxes('edit', 'acf_after_title', $this->taxonomy); ?>
-                </form>
-            </div>
-        
-        </template>
-        
-        <template id="tmpl-acf-normal">
-            
-            <div id="poststuff" class="acfe-list-postboxes">
-                <form method="post">
-                    <?php do_meta_boxes('edit', 'normal', $this->taxonomy); ?>
-                </form>
-            </div>
-        
-        </template>
-        
-        <template id="tmpl-acf-side">
-            
-            <div class="acf-column-2">
-                
-                <div id="poststuff" class="acfe-list-postboxes -side">
-                    <form method="post">
-                        <?php do_meta_boxes('edit', 'side', $this->taxonomy); ?>
-                    </form>
-                </div>
-            
-            </div>
-        
-        </template>
-        <script type="text/javascript">
-        (function($){
+	class acf_form_taxonomy {
 
-            // main form
-            var $main = $('#posts-filter');
+		var $view = 'add';
 
-            $main.wrap('<div class="acf-columns-2" />');
-            $main.wrap('<div class="acf-column-1" />');
 
-            // field groups
-            var $column_1 = $('.acf-column-1');
+		/*
+		*  __construct
+		*
+		*  This function will setup the class functionality
+		*
+		*  @type    function
+		*  @date    5/03/2014
+		*  @since   5.0.0
+		*
+		*  @param   n/a
+		*  @return  n/a
+		*/
 
-            $column_1.prepend($('.search-form'));
-            $column_1.prepend($('#tmpl-acf-after-title').html());
-            $column_1.append($('#tmpl-acf-normal').html());
-            $column_1.after($('#tmpl-acf-side').html());
-            
-            <?php if(!acf_get_setting('acfe/modules/ui') || !acf_is_filter_enabled('acfe/taxonomy_list/side')): ?>
-                $('.acf-columns-2').removeClass('acf-columns-2');
-            <?php endif; ?>
+		function __construct() {
 
-        })(jQuery);
-        </script>
-        <?php
-    }
-    
-}
+			// actions
+			add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ) );
 
-new acfe_screen_taxonomy();
+			// save
+			add_action( 'create_term', array( $this, 'save_term' ), 10, 3 );
+			add_action( 'edit_term', array( $this, 'save_term' ), 10, 3 );
+
+			// delete
+			add_action( 'delete_term', array( $this, 'delete_term' ), 10, 4 );
+
+		}
+
+
+		/*
+		*  validate_page
+		*
+		*  This function will check if the current page is for a post/page edit form
+		*
+		*  @type    function
+		*  @date    23/06/12
+		*  @since   3.1.8
+		*
+		*  @param   n/a
+		*  @return  (boolean)
+		*/
+
+		function validate_page() {
+
+			// global
+			global $pagenow;
+
+			// validate page
+			if ( $pagenow === 'edit-tags.php' || $pagenow === 'term.php' ) {
+
+				return true;
+
+			}
+
+			// return
+			return false;
+		}
+
+
+		/*
+		*  admin_enqueue_scripts
+		*
+		*  This action is run after post query but before any admin script / head actions.
+		*  It is a good place to register all actions.
+		*
+		*  @type    action (admin_enqueue_scripts)
+		*  @date    26/01/13
+		*  @since   3.6.0
+		*
+		*  @param   N/A
+		*  @return  N/A
+		*/
+
+		function admin_enqueue_scripts() {
+
+			// validate page
+			if ( ! $this->validate_page() ) {
+
+				return;
+
+			}
+
+			// vars
+			$screen   = get_current_screen();
+			$taxonomy = $screen->taxonomy;
+
+			// load acf scripts
+			acf_enqueue_scripts();
+
+			// actions
+			add_action( 'admin_footer', array( $this, 'admin_footer' ), 10, 1 );
+			add_action( "{$taxonomy}_add_form_fields", array( $this, 'add_term' ), 10, 1 );
+			add_action( "{$taxonomy}_edit_form", array( $this, 'edit_term' ), 10, 2 );
+
+		}
+
+
+		/*
+		*  add_term
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function add_term( $taxonomy ) {
+
+			// vars
+			$post_id = 'term_0';
+
+			// update vars
+			$this->view = 'add';
+
+			// get field groups
+			$field_groups = acf_get_field_groups(
+				array(
+					'taxonomy' => $taxonomy,
+				)
+			);
+
+			// render
+			if ( ! empty( $field_groups ) ) {
+
+				// data
+				acf_form_data(
+					array(
+						'screen'  => 'taxonomy',
+						'post_id' => $post_id,
+					)
+				);
+
+				// wrap
+				echo '<div id="acf-term-fields" class="acf-fields -clear">';
+
+				// loop
+				foreach ( $field_groups as $field_group ) {
+						$fields = acf_get_fields( $field_group );
+						acf_render_fields( $fields, $post_id, 'div', 'field' );
+				}
+
+				// wrap
+				echo '</div>';
+
+			}
+
+		}
+
+
+		/*
+		*  edit_term
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function edit_term( $term, $taxonomy ) {
+
+			// vars
+			$post_id = 'term_' . $term->term_id;
+
+			// update vars
+			$this->view = 'edit';
+
+			// get field groups
+			$field_groups = acf_get_field_groups(
+				array(
+					'taxonomy' => $taxonomy,
+				)
+			);
+
+			// render
+			if ( ! empty( $field_groups ) ) {
+
+				acf_form_data(
+					array(
+						'screen'  => 'taxonomy',
+						'post_id' => $post_id,
+					)
+				);
+
+				foreach ( $field_groups as $field_group ) {
+
+						// title
+					if ( $field_group['style'] == 'default' ) {
+						echo '<h2>' . $field_group['title'] . '</h2>';
+					}
+
+						// fields
+						echo '<table class="form-table">';
+					$fields = acf_get_fields( $field_group );
+					acf_render_fields( $fields, $post_id, 'tr', 'field' );
+						echo '</table>';
+
+				}
+			}
+
+		}
+
+
+		/*
+		*  admin_footer
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    27/03/2015
+		*  @since   5.1.5
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function admin_footer() {
+
+			?>
+<script type="text/javascript">
+(function($) {
+	
+	// Define vars.
+	var view = '<?php echo $this->view; ?>';
+	var $form = $('#' + view + 'tag');
+	var $submit = $('#' + view + 'tag input[type="submit"]:last');
+	
+	// Add missing spinner.
+	if( !$submit.next('.spinner').length ) {
+		$submit.after('<span class="spinner"></span>');
+	}
+	
+			<?php
+
+			// View: Add.
+			if ( $this->view == 'add' ) :
+				?>
+	
+	// vars
+	var $fields = $('#acf-term-fields');
+	var html = '';
+	
+	// Store a copy of the $fields html used later to replace after AJAX request.
+	// Hook into 'prepare' action to allow ACF core helpers to first modify DOM.
+	// Fixes issue where hidden #acf-hidden-wp-editor is initialized again.
+	acf.addAction('prepare', function(){
+		html = $fields.html();
+	}, 6);
+		
+	// WP triggers click as primary action
+	$submit.on('click', function( e ){
+		
+		// validate
+		var valid = acf.validateForm({
+			form: $form,
+			event: e,
+			reset: true
+		});
+		
+		// if not valid, stop event and allow validation to continue
+		if( !valid ) {
+			e.preventDefault();
+			e.stopImmediatePropagation();
+		}
+	});
+	
+	// listen to AJAX add-tag complete
+	$(document).ajaxComplete(function(event, xhr, settings) {
+		
+		// bail early if is other ajax call
+		if( settings.data.indexOf('action=add-tag') == -1 ) {
+			return;
+		}
+		
+		// bail early if response contains error
+		if( xhr.responseText.indexOf('wp_error') !== -1 ) {
+			return;
+		}
+		
+		// action for 3rd party customization
+		acf.doAction('remove', $fields);
+		
+		// reset HTML
+		$fields.html( html );
+		
+		// action for 3rd party customization
+		acf.doAction('append', $fields);
+		
+		// reset unload
+		acf.unload.reset();
+	});
+	
+		<?php endif; ?>
+	
+})(jQuery);	
+</script>
+			<?php
+
+		}
+
+
+		/*
+		*  save_term
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function save_term( $term_id, $tt_id, $taxonomy ) {
+
+			// vars
+			$post_id = 'term_' . $term_id;
+
+			// verify and remove nonce
+			if ( ! acf_verify_nonce( 'taxonomy' ) ) {
+				return $term_id;
+			}
+
+			// valied and show errors
+			acf_validate_save_post( true );
+
+			// save
+			acf_save_post( $post_id );
+
+		}
+
+
+		/*
+		*  delete_term
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    15/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function delete_term( $term, $tt_id, $taxonomy, $deleted_term ) {
+
+			// bail early if termmeta table exists
+			if ( acf_isset_termmeta() ) {
+				return $term;
+			}
+
+			// globals
+			global $wpdb;
+
+			// vars
+			$search  = $taxonomy . '_' . $term . '_%';
+			$_search = '_' . $search;
+
+			// escape '_'
+			// http://stackoverflow.com/questions/2300285/how-do-i-escape-in-sql-server
+			$search  = str_replace( '_', '\_', $search );
+			$_search = str_replace( '_', '\_', $_search );
+
+			// delete
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM $wpdb->options WHERE option_name LIKE %s OR option_name LIKE %s",
+					$search,
+					$_search
+				)
+			);
+
+		}
+
+	}
+
+	new acf_form_taxonomy();
 
 endif;
+
+
+?>

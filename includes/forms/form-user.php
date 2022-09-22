@@ -1,235 +1,387 @@
 <?php
 
-if(!defined('ABSPATH'))
-    exit;
-
-if(!class_exists('acfe_screen_user')):
-
-class acfe_screen_user{
-    
-    // vars
-    var $user_id;
-    
-    /*
-     * Construct
-     */
-    function __construct(){
-        
-        /*
-         * acfe/load_user_new
-         * acfe/add_user_new_meta_boxes
-         *
-         * acfe/load_user                   $user_id
-         * acfe/add_user_meta_boxes         $user
-         *
-         * acfe/load_users
-         * acfe/add_users_meta_boxes
-         */
-        
-        // add
-        add_action('load-user-new.php',     array($this, 'user_new_load'));
-        
-        // edit
-        add_action('load-profile.php',      array($this, 'user_load'));
-        add_action('load-user-edit.php',    array($this, 'user_load'));
-        
-        // list
-        add_action('load-users.php',        array($this, 'users_load'));
-        
-    }
-    
-    /*
-     * User New: Load
-     */
-    function user_new_load(){
-        
-        // do not process on multisite
-        if(is_multisite()){
-            return;
-        }
-        
-        // actions
-        do_action("acfe/load_user_new");
-        
-        // hooks
-        add_action('user_new_form', array($this, 'user_new_meta_boxes'));
-        
-    }
-    
-    /*
-     * User New: Meta Boxes
-     */
-    function user_new_meta_boxes($user){
-    
-        // add meta boxes
-        do_action('acfe/add_user_new_meta_boxes');
-        
-        // enhanced ui
-        if(acf_get_setting('acfe/modules/ui')){
-    
-            // do meta boxes
-            $screen = get_current_screen();
-    
-            do_meta_boxes($screen, 'acf_after_title', $user);
-            do_meta_boxes($screen, 'normal', $user);
-            do_meta_boxes($screen, 'side', $user);
-            
-        }
-        
-    }
-    
-    
-    
-    /*
-     * User: Load
-     */
-    function user_load(){
-        
-        // do not process on network screens
-        if(acf_is_screen(array('user-edit-network', 'profile-network'))){
-            return;
-        }
-        
-        // vars
-        $this->user_id = acfe_get_post_id(false);
-        
-        // actions
-        do_action("acfe/load_user", $this->user_id);
-    
-        // hooks
-        add_action('show_user_profile', array($this, 'user_meta_boxes'));
-        add_action('edit_user_profile', array($this, 'user_meta_boxes'));
-        
-    }
-    
-    /*
-     * User: Meta Boxes
-     */
-    function user_meta_boxes($user){
-        
-        // add meta boxes
-        do_action('acfe/add_user_meta_boxes', $user);
-    
-        // enhanced ui
-        if(acf_get_setting('acfe/modules/ui')){
-        
-            // do meta boxes
-            $screen = get_current_screen();
-        
-            do_meta_boxes($screen, 'acf_after_title', $user);
-            do_meta_boxes($screen, 'normal', $user);
-            do_meta_boxes($screen, 'side', $user);
-        
-        }
-        
-    }
-    
-    
-    
-    /*
-     * Users: Load
-     */
-    function users_load(){
-    
-        // do not process on network screens
-        if(acf_is_screen(array('users-network'))){
-            return;
-        }
-    
-        // actions
-        do_action("acfe/load_users");
-    
-        // hooks
-        add_action('admin_footer', array($this, 'users_footer'));
-        
-    }
-    
-    /*
-     * Users: Footer
-     */
-    function users_footer(){
-        
-        do_action('acfe/add_users_meta_boxes', 'user');
-    
-        $this->users_do_meta_boxes();
-        
-    }
-    
-    /*
-     * Users: Do Meta Boxes
-     */
-    function users_do_meta_boxes(){
-        
-        // check filter
-        if(!acf_is_filter_enabled('acfe/user_list')){
-            return;
-        }
-        
-        // enqueue
-        acf_enqueue_scripts();
-        
-        ?>
-        <template id="tmpl-acf-after-title">
-            
-            <div id="poststuff" class="acfe-list-postboxes">
-                <form method="post">
-                    <?php do_meta_boxes('edit', 'acf_after_title', 'user'); ?>
-                </form>
-            </div>
-        
-        </template>
-        
-        <template id="tmpl-acf-normal">
-            
-            <div id="poststuff" class="acfe-list-postboxes">
-                <form method="post">
-                    <?php do_meta_boxes('edit', 'normal', 'user'); ?>
-                </form>
-            </div>
-        
-        </template>
-        
-        <template id="tmpl-acf-side">
-            
-            <div class="acf-column-2">
-                
-                <div id="poststuff" class="acfe-list-postboxes -side">
-                    <form method="post">
-                        <?php do_meta_boxes('edit', 'side', 'user'); ?>
-                    </form>
-                </div>
-            
-            </div>
-        
-        </template>
-        <script type="text/javascript">
-        (function($){
-
-            // main form
-            var $main = $('.wrap > form');
-
-            $main.wrap('<div class="acf-columns-2" />');
-            $main.prepend($('.subsubsub'));
-            $main.wrap('<div class="acf-column-1" />');
-
-            // field groups
-            var $column_1 = $('.acf-column-1');
-
-            $column_1.prepend($('#tmpl-acf-after-title').html());
-            $column_1.append($('#tmpl-acf-normal').html());
-            $column_1.after($('#tmpl-acf-side').html());
-            
-            <?php if(!acf_is_filter_enabled('acfe/user_list/side')): ?>
-                $('.acf-columns-2').removeClass('acf-columns-2');
-            <?php endif; ?>
-
-        })(jQuery);
-        </script>
-        <?php
-    }
-    
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly
 }
 
-new acfe_screen_user();
+if ( ! class_exists( 'ACF_Form_User' ) ) :
 
-endif;
+	class ACF_Form_User {
+
+		/** @var string The current view (new, edit, register) */
+		var $view = '';
+
+
+		/*
+		*  __construct
+		*
+		*  This function will setup the class functionality
+		*
+		*  @type    function
+		*  @date    5/03/2014
+		*  @since   5.0.0
+		*
+		*  @param   n/a
+		*  @return  n/a
+		*/
+
+		function __construct() {
+
+			// enqueue
+			add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ) );
+			add_action( 'login_form_register', array( $this, 'login_form_register' ) );
+
+			// render
+			add_action( 'show_user_profile', array( $this, 'render_edit' ) );
+			add_action( 'edit_user_profile', array( $this, 'render_edit' ) );
+			add_action( 'user_new_form', array( $this, 'render_new' ) );
+			add_action( 'register_form', array( $this, 'render_register' ) );
+
+			// save
+			add_action( 'user_register', array( $this, 'save_user' ) );
+			add_action( 'profile_update', array( $this, 'save_user' ) );
+
+			// Perform validation before new user is registered.
+			add_filter( 'registration_errors', array( $this, 'filter_registration_errors' ), 10, 3 );
+		}
+
+
+		/**
+		 *  admin_enqueue_scripts
+		 *
+		 *  Checks current screen and enqueues scripts
+		 *
+		 *  @date    17/4/18
+		 *  @since   5.6.9
+		 *
+		 *  @param   void
+		 *  @return  void
+		 */
+
+		function admin_enqueue_scripts() {
+
+			// bail early if not valid screen
+			if ( ! acf_is_screen( array( 'profile', 'user', 'user-edit' ) ) ) {
+				return;
+			}
+
+			// enqueue
+			acf_enqueue_scripts();
+		}
+
+
+		/**
+		 *  login_form_register
+		 *
+		 *  Customizes and enqueues scripts
+		 *
+		 *  @date    17/4/18
+		 *  @since   5.6.9
+		 *
+		 *  @param   void
+		 *  @return  void
+		 */
+
+		function login_form_register() {
+
+			// customize action prefix so that "admin_head" = "login_head"
+			acf_enqueue_scripts(
+				array(
+					'context' => 'login',
+				)
+			);
+		}
+
+
+		/*
+		*  register_user
+		*
+		*  Called during the user register form
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   void
+		*  @return  void
+		*/
+
+		function render_register() {
+
+			// render
+			$this->render(
+				array(
+					'user_id' => 0,
+					'view'    => 'register',
+					'el'      => 'div',
+				)
+			);
+		}
+
+
+		/*
+		*  render_edit
+		*
+		*  Called during the user edit form
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   void
+		*  @return  void
+		*/
+
+		function render_edit( $user ) {
+
+			// add compatibility with front-end user profile edit forms such as bbPress
+			if ( ! is_admin() ) {
+				acf_enqueue_scripts();
+			}
+
+			// render
+			$this->render(
+				array(
+					'user_id' => $user->ID,
+					'view'    => 'edit',
+					'el'      => 'tr',
+				)
+			);
+		}
+
+
+		/*
+		*  user_new_form
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function render_new() {
+
+			// Multisite uses a different 'user-new.php' form. Don't render fields here
+			if ( is_multisite() ) {
+				return;
+			}
+
+			// render
+			$this->render(
+				array(
+					'user_id' => 0,
+					'view'    => 'add',
+					'el'      => 'tr',
+				)
+			);
+		}
+
+
+		/*
+		*  render
+		*
+		*  This function will render ACF fields for a given $post_id parameter
+		*
+		*  @type    function
+		*  @date    7/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $user_id (int) this can be set to 0 for a new user
+		*  @param   $user_form (string) used for location rule matching. edit | add | register
+		*  @param   $el (string)
+		*  @return  n/a
+		*/
+
+		function render( $args = array() ) {
+
+			// Allow $_POST data to persist across form submission attempts.
+			if ( isset( $_POST['acf'] ) ) {
+				add_filter( 'acf/pre_load_value', array( $this, 'filter_pre_load_value' ), 10, 3 );
+			}
+
+			// defaults
+			$args = wp_parse_args(
+				$args,
+				array(
+					'user_id' => 0,
+					'view'    => 'edit',
+					'el'      => 'tr',
+				)
+			);
+
+			// vars
+			$post_id = 'user_' . $args['user_id'];
+
+			// get field groups
+			$field_groups = acf_get_field_groups(
+				array(
+					'user_id'   => $args['user_id'] ? $args['user_id'] : 'new',
+					'user_form' => $args['view'],
+				)
+			);
+
+			// bail early if no field groups
+			if ( empty( $field_groups ) ) {
+				return;
+			}
+
+			// form data
+			acf_form_data(
+				array(
+					'screen'     => 'user',
+					'post_id'    => $post_id,
+					'validation' => ( $args['view'] == 'register' ) ? 0 : 1,
+				)
+			);
+
+			// elements
+			$before = '<table class="form-table"><tbody>';
+			$after  = '</tbody></table>';
+
+			if ( $args['el'] == 'div' ) {
+				$before = '<div class="acf-user-' . $args['view'] . '-fields acf-fields -clear">';
+				$after  = '</div>';
+			}
+
+			// loop
+			foreach ( $field_groups as $field_group ) {
+
+				// vars
+				$fields = acf_get_fields( $field_group );
+
+				// title
+				if ( $field_group['style'] === 'default' ) {
+					echo '<h2>' . $field_group['title'] . '</h2>';
+				}
+
+				// render
+				echo $before;
+				acf_render_fields( $fields, $post_id, $args['el'], $field_group['instruction_placement'] );
+				echo $after;
+			}
+
+			// actions
+			add_action( 'acf/input/admin_footer', array( $this, 'admin_footer' ), 10, 1 );
+		}
+
+
+		/*
+		*  admin_footer
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    27/03/2015
+		*  @since   5.1.5
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function admin_footer() {
+
+			// script
+			?>
+<script type="text/javascript">
+(function($) {
+	
+	// vars
+	var view = '<?php echo $this->view; ?>';
+	
+	// add missing spinners
+	var $submit = $('input.button-primary');
+	if( !$submit.next('.spinner').length ) {
+		$submit.after('<span class="spinner"></span>');
+	}
+	
+})(jQuery);	
+</script>
+			<?php
+
+		}
+
+
+		/*
+		*  save_user
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function save_user( $user_id ) {
+
+			// verify nonce
+			if ( ! acf_verify_nonce( 'user' ) ) {
+				return $user_id;
+			}
+
+			// save
+			if ( acf_validate_save_post( true ) ) {
+				acf_save_post( "user_$user_id" );
+			}
+		}
+
+		/**
+		 * filter_registration_errors
+		 *
+		 * Validates $_POST data and appends any errors to prevent new user registration.
+		 *
+		 * @date    12/7/19
+		 * @since   5.8.1
+		 *
+		 * @param   WP_Error $errors A WP_Error object containing any errors encountered during registration.
+		 * @param   string   $sanitized_user_login User's username after it has been sanitized.
+		 * @param   string   $user_email User's email.
+		 * @return  WP_Error
+		 */
+		function filter_registration_errors( $errors, $sanitized_user_login, $user_email ) {
+			if ( ! acf_validate_save_post() ) {
+				$acf_errors = acf_get_validation_errors();
+				foreach ( $acf_errors as $acf_error ) {
+					$errors->add(
+						acf_idify( $acf_error['input'] ),
+						acf_esc_html( acf_punctify( sprintf( __( '<strong>Error</strong>: %s', 'acf' ), $acf_error['message'] ) ) )
+					);
+				}
+			}
+			return $errors;
+		}
+
+		/**
+		 * filter_pre_load_value
+		 *
+		 * Checks if a $_POST value exists for this field to allow persistent values.
+		 *
+		 * @date    12/7/19
+		 * @since   5.8.2
+		 *
+		 * @param   null         $null A null placeholder.
+		 * @param   (int|string) $post_id The post id.
+		 * @param   array        $field The field array.
+		 * @return  mixed
+		 */
+		function filter_pre_load_value( $null, $post_id, $field ) {
+			$field_key = $field['key'];
+			if ( isset( $_POST['acf'][ $field_key ] ) ) {
+				return $_POST['acf'][ $field_key ];
+			}
+			return $null;
+		}
+	}
+
+	// instantiate
+	acf_new_instance( 'ACF_Form_User' );
+
+endif; // class_exists check
+
+?>

@@ -1,707 +1,488 @@
 <?php
 
-use WPGraphQL\AppContext;
-use WPGraphQL\Model\Term;
-
-if(!defined('ABSPATH'))
-    exit;
-
-if(!class_exists('acfe_compatibility')):
-
-class acfe_compatibility{
-    
-    function __construct(){
-    
-        add_action('acf/init',                                      array($this, 'init'), 98);
-        add_action('after_plugin_row_' . ACFE_BASENAME,             array($this, 'plugin_row'), 5, 3);
-        
-        add_filter('acfe/form/import_args',                         array($this, 'acfe_form_import_compatibility'), 10, 3);
-        add_filter('pto/posts_orderby/ignore',                      array($this, 'pto_acf_field_group'), 10, 3);
-        add_filter('pto/get_options',                               array($this, 'pto_options_acf_field_group'));
-        
-        add_action('admin_menu',                                    array($this, 'cotto_submenu'), 999);
-        add_filter('rank_math/metabox/priority',                    array($this, 'rankmath_metaboxes_priority'));
-        add_filter('wpseo_metabox_prio',                            array($this, 'yoast_metaboxes_priority'));
-        add_filter('pll_get_post_types',                            array($this, 'polylang'), 10, 2);
-        add_action('elementor/documents/register_controls',         array($this, 'elementor'));
-        add_filter('wpgraphql_acf_supported_fields',                array($this, 'wpgraphql_supported_fields'));
-        add_filter('wpgraphql_acf_register_graphql_field',          array($this, 'wpgraphql_register_field'), 10, 4);
-        
-    }
-    
-    function plugin_row($plugin_file, $plugin_data, $status){
-    
-        // Bail early
-        if(acfe()->acf()) return;
-    
-        // Check WP version
-        $colspan = version_compare($GLOBALS['wp_version'], '5.5', '<') ? 3 : 4;
-    
-        ?>
-        <style>
-            .plugins tr[data-plugin='<?php echo ACFE_BASENAME; ?>'] th,
-            .plugins tr[data-plugin='<?php echo ACFE_BASENAME; ?>'] td{
-                box-shadow:none;
-            }
-        
-            <?php if(isset($plugin_data['update']) && !empty($plugin_data['update'])){ ?>
-
-            .plugins tr.acfe-plugin-tr td{
-                box-shadow:none !important;
-            }
-
-            .plugins tr.acfe-plugin-tr .update-message{
-                margin-bottom:0;
-            }
-        
-            <?php } ?>
-        </style>
-    
-        <tr class="plugin-update-tr active acfe-plugin-tr">
-            <td colspan="<?php echo $colspan; ?>" class="plugin-update colspanchange">
-                <div class="update-message notice inline notice-error notice-alt">
-                    <p><?php _e('ACF Extended requires <a href="https://www.advancedcustomfields.com/pro/" target="_blank">Advanced Custom Fields PRO</a> (minimum: 5.8).', 'acfe'); ?></p>
-                </div>
-            </td>
-        </tr>
-        <?php
-        
-    }
-    
-    function init(){
-    
-        $this->update_settings();
-        
-        add_filter('acf/validate_field_group',                      array($this, 'field_group_location_list'), 20);
-        add_filter('acf/validate_field',                            array($this, 'field_acfe_update'), 20);
-        
-        add_filter('acf/validate_field/type=group',                 array($this, 'field_seamless_style'), 20);
-        add_filter('acf/validate_field/type=clone',                 array($this, 'field_seamless_style'), 20);
-        add_filter('acf/validate_field/type=acfe_dynamic_message',  array($this, 'field_dynamic_message'), 20);
-        add_filter('acfe/load_fields/type=flexible_content',        array($this, 'field_flexible_settings_title'), 20, 2);
-        
-        add_filter('acf/prepare_field/name=acfe_flexible_category', array($this, 'field_flexible_layout_categories'), 10, 2);
-        
-    }
-    
-    /**
-     * ACF Extended: Settings
-     */
-    function update_settings(){
-        
-        // ACF Extended: 0.8.8 - 'acfe/modules/taxonomies' is now used for the old 'acfe/modules/dynamic_taxonomies'
-        // ACF Extended: 0.8.6.3 - Renamed 'acfe/modules/taxonomies' to 'acfe/modules/ui'
-        //if(acf_get_setting('acfe/modules/taxonomies') !== null){
-        //    acf_update_setting('acfe/modules/ui', acf_get_setting('acfe/modules/taxonomies'));
-        //}
-        
-        // ACF Extended: 0.8 - Renamed 'acfe_php*' to 'acfe/php*'
-        if(acf_get_setting('acfe_php') !== null){
-            acf_update_setting('acfe/php', acf_get_setting('acfe_php'));
-        }
-    
-        if(acf_get_setting('php_save') !== null){
-            acf_update_setting('acfe/php_save', acf_get_setting('php_save'));
-        }
-    
-        if(acf_get_setting('php_load') !== null){
-            acf_update_setting('acfe/php_load', acf_get_setting('php_load'));
-        }
-    
-        if(acf_get_setting('php_found') !== null){
-            acf_update_setting('acfe/php_found', acf_get_setting('php_found'));
-        }
-        
-        // ACF Extended: 0.8.8 - renamed modules
-        if(acf_get_setting('acfe/modules/dynamic_block_types') !== null){
-            acf_update_setting('acfe/modules/block_types', acf_get_setting('acfe/modules/dynamic_block_types'));
-        }
-        
-        if(acf_get_setting('acfe/modules/dynamic_forms') !== null){
-            acf_update_setting('acfe/modules/forms', acf_get_setting('acfe/modules/dynamic_forms'));
-        }
-        
-        if(acf_get_setting('acfe/modules/dynamic_options_pages') !== null){
-            acf_update_setting('acfe/modules/options_pages', acf_get_setting('acfe/modules/dynamic_options_pages'));
-        }
-        
-        if(acf_get_setting('acfe/modules/dynamic_post_types') !== null){
-            acf_update_setting('acfe/modules/post_types', acf_get_setting('acfe/modules/dynamic_post_types'));
-        }
-        
-        if(acf_get_setting('acfe/modules/dynamic_taxonomies') !== null){
-            acf_update_setting('acfe/modules/taxonomies', acf_get_setting('acfe/modules/dynamic_taxonomies'));
-        }
-        
-    }
-
-    /**
-     * ACF Extended: 0.8
-     * Field Group Location: Archive renamed to List
-     */
-    function field_group_location_list($field_group){
-        
-        if(!acf_maybe_get($field_group, 'location'))
-            return $field_group;
-        
-        foreach($field_group['location'] as &$or){
-            
-            foreach($or as &$and){
-                
-                if(!isset($and['value']))
-                    continue;
-                
-                // Post Type List
-                if($and['param'] === 'post_type' && acfe_ends_with($and['value'], '_archive')){
-                
-                    $and['param'] = 'post_type_list';
-                    $and['value'] = substr_replace($and['value'], '', -8);
-                
-                }
-                
-                // Taxonomy List
-                elseif($and['param'] === 'taxonomy' && acfe_ends_with($and['value'], '_archive')){
-                    
-                    $and['param'] = 'taxonomy_list';
-                    $and['value'] = substr_replace($and['value'], '', -8);
-                    
-                }
-                
-            }
-            
-        }
-        
-        return $field_group;
-        
-    }
-
-    /**
-     * ACF Extended: 0.8
-     * Field Filter Value: Removed from this version
-     */
-    function field_acfe_update($field){
-        
-        if(!acf_maybe_get($field, 'acfe_update'))
-            return $field;
-        
-        unset($field['acfe_update']);
-        
-        return $field;
-        
-    }
-
-    /**
-     * ACF Extended: 0.8.5
-     * Field Group/Clone: Fixed typo "Seamless"
-     */
-    function field_seamless_style($field){
-        
-        if($seamless = acf_maybe_get($field, 'acfe_seemless_style', false)){
-            
-            $field['acfe_seamless_style'] = $seamless;
-            
-        }
-        
-        return $field;
-        
-    }
-    
-    /**
-     * ACF Extended: 0.8.8.5
-     * Renamed Dynamic Message to Dynamic Render
-     */
-    function field_dynamic_message($field){
-        
-        $field['type'] = 'acfe_dynamic_render';
-        
-        return $field;
-        
-    }
-
-    /**
-     * ACF Extended: 0.8.4.5
-     * Field Flexible Content: Fix duplicated "layout_settings" & "layout_title"
-     */
-    function field_flexible_settings_title($fields, $parent){
-        
-        // Check if is tool screen
-        if(!acf_is_screen(acfe_get_acf_screen_id('acf-tools')))
-            return $fields;
-        
-        foreach($fields as $_k => $_field){
-            
-            // field name
-            $_field_name = acf_maybe_get($_field, 'name');
-            
-            // check 'acfe_flexible_layout_title' & 'layout_settings'
-            if($_field_name !== 'acfe_flexible_layout_title' && $_field_name !== 'layout_settings')
-                continue;
-            
-            // unset
-            unset($fields[$_k]);
-            
-        }
-        
-        return $fields;
-        
-    }
-    
-    /**
-     * ACF Extended: 0.8.6.7
-     * Field Flexible Content: Compatibility for Layout Categories
-     */
-    function field_flexible_layout_categories($field){
-        
-        $value = acf_maybe_get($field, 'value');
-    
-        if(empty($value))
-            return $field;
-    
-        if(is_string($value)){
-        
-            $explode = explode('|', $value);
-        
-            $choices = array();
-        
-            foreach($explode as $v){
-            
-                $v = trim($v);
-                $choices[$v] = $v;
-            
-            }
-        
-            $field['choices'] = $choices;
-            $field['value'] = $choices;
-        
-        }
-    
-        return $field;
-    
-    }
-    
-    /**
-     * ACF Extended: 0.8.5
-     * Module Dynamic Forms: Upgrade previous versions
-     */
-    function acfe_form_import_compatibility($args, $name, $post_id){
-        
-        // ACF Extended: 0.8.5 Compatibility - Step 1
-        // Groups upgrade
-        $has_upgraded = false;
-        
-        $rules = array(
-            
-            // Post: title
-            array(
-                'group'             => 'field_acfe_form_post_save_post_title_group',
-                'sub_field'         => 'field_acfe_form_post_save_post_title',
-                'sub_field_custom'  => 'field_acfe_form_post_save_post_title_custom',
-            ),
-            
-            // Post: name
-            array(
-                'group'             => 'field_acfe_form_post_save_post_name_group',
-                'sub_field'         => 'field_acfe_form_post_save_post_name',
-                'sub_field_custom'  => 'field_acfe_form_post_save_post_name_custom',
-            ),
-            
-            // Term: name
-            array(
-                'group'             => 'field_acfe_form_term_save_name_group',
-                'sub_field'         => 'field_acfe_form_term_save_name',
-                'sub_field_custom'  => 'field_acfe_form_term_save_name_custom',
-            ),
-            
-            // Term: slug
-            array(
-                'group'             => 'field_acfe_form_term_save_slug_group',
-                'sub_field'         => 'field_acfe_form_term_save_slug',
-                'sub_field_custom'  => 'field_acfe_form_term_save_slug_custom',
-            ),
-            
-            // User: e-mail
-            array(
-                'group'             => 'field_acfe_form_user_save_email_group',
-                'sub_field'         => 'field_acfe_form_user_save_email',
-                'sub_field_custom'  => 'field_acfe_form_user_save_email_custom',
-            ),
-            
-            // User: username
-            array(
-                'group'             => 'field_acfe_form_user_save_username_group',
-                'sub_field'         => 'field_acfe_form_user_save_username',
-                'sub_field_custom'  => 'field_acfe_form_user_save_username_custom',
-            ),
-            
-            // User: password
-            array(
-                'group'             => 'field_acfe_form_user_save_password_group',
-                'sub_field'         => 'field_acfe_form_user_save_password',
-                'sub_field_custom'  => 'field_acfe_form_user_save_password_custom',
-            ),
-            
-            // User: first name
-            array(
-                'group'             => 'field_acfe_form_user_save_first_name_group',
-                'sub_field'         => 'field_acfe_form_user_save_first_name',
-                'sub_field_custom'  => 'field_acfe_form_user_save_first_name_custom',
-            ),
-            
-            // User: last name
-            array(
-                'group'             => 'field_acfe_form_user_save_last_name_group',
-                'sub_field'         => 'field_acfe_form_user_save_last_name',
-                'sub_field_custom'  => 'field_acfe_form_user_save_last_name_custom',
-            ),
-            
-            // User: nickname
-            array(
-                'group'             => 'field_acfe_form_user_save_nickname_group',
-                'sub_field'         => 'field_acfe_form_user_save_nickname',
-                'sub_field_custom'  => 'field_acfe_form_user_save_nickname_custom',
-            ),
-            
-            // User: display name
-            array(
-                'group'             => 'field_acfe_form_user_save_display_name_group',
-                'sub_field'         => 'field_acfe_form_user_save_display_name',
-                'sub_field_custom'  => 'field_acfe_form_user_save_display_name_custom',
-            ),
-            
-            // User: website
-            array(
-                'group'             => 'field_acfe_form_user_save_website_group',
-                'sub_field'         => 'field_acfe_form_user_save_website',
-                'sub_field_custom'  => 'field_acfe_form_user_save_website_custom',
-            ),
-        
-        );
-        
-        foreach($args['acfe_form_actions'] as &$row){
-            
-            foreach($rules as $rule){
-                
-                if(!acf_maybe_get($row, $rule['group']))
-                    continue;
-                
-                $value = null;
-                $group = $row[$rule['group']];
-                
-                if(acf_maybe_get($group, $rule['sub_field']) === 'custom'){
-                    
-                    $value = acf_maybe_get($group, $rule['sub_field_custom']);
-                    
-                }else{
-                    
-                    $value = acf_maybe_get($group, $rule['sub_field']);
-                    
-                }
-                
-                unset($row[$rule['group']]);
-                
-                $row[$rule['sub_field']] = $value;
-                
-                $has_upgraded = true;
-                
-            }
-            
-        }
-        
-        // ACF Extended: 0.8.5 Compatibility - Step 2
-        // Field mapping upgrade
-        if($has_upgraded){
-            
-            // Rules
-            $rules = array(
-                
-                array(
-                    'load_values' => 'field_acfe_form_post_load_values',
-                    'fields' => array(
-                        'field_acfe_form_post_map_post_type'       => 'field_acfe_form_post_save_post_type',
-                        'field_acfe_form_post_map_post_status'     => 'field_acfe_form_post_save_post_status',
-                        'field_acfe_form_post_map_post_title'      => 'field_acfe_form_post_save_post_title',
-                        'field_acfe_form_post_map_post_name'       => 'field_acfe_form_post_save_post_name',
-                        'field_acfe_form_post_map_post_content'    => 'field_acfe_form_post_save_post_content',
-                        'field_acfe_form_post_map_post_author'     => 'field_acfe_form_post_save_post_author',
-                        'field_acfe_form_post_map_post_parent'     => 'field_acfe_form_post_save_post_parent',
-                        'field_acfe_form_post_map_post_terms'      => 'field_acfe_form_post_save_post_terms',
-                    )
-                ),
-                
-                array(
-                    'load_values' => 'field_acfe_form_term_load_values',
-                    'fields' => array(
-                        'field_acfe_form_term_map_name'            => 'field_acfe_form_term_save_name',
-                        'field_acfe_form_term_map_slug'            => 'field_acfe_form_term_save_slug',
-                        'field_acfe_form_term_map_taxonomy'        => 'field_acfe_form_term_save_taxonomy',
-                        'field_acfe_form_term_map_parent'          => 'field_acfe_form_term_save_parent',
-                        'field_acfe_form_term_map_description'     => 'field_acfe_form_term_save_description',
-                    )
-                ),
-                
-                array(
-                    'load_values' => 'field_acfe_form_user_load_values',
-                    'fields' => array(
-                        'field_acfe_form_user_map_email'        => 'field_acfe_form_user_save_email',
-                        'field_acfe_form_user_map_username'     => 'field_acfe_form_user_save_username',
-                        'field_acfe_form_user_map_password'     => 'field_acfe_form_user_save_password',
-                        'field_acfe_form_user_map_first_name'   => 'field_acfe_form_user_save_first_name',
-                        'field_acfe_form_user_map_last_name'    => 'field_acfe_form_user_save_last_name',
-                        'field_acfe_form_user_map_nickname'     => 'field_acfe_form_user_save_nickname',
-                        'field_acfe_form_user_map_display_name' => 'field_acfe_form_user_save_display_name',
-                        'field_acfe_form_user_map_website'      => 'field_acfe_form_user_save_website',
-                        'field_acfe_form_user_map_description'  => 'field_acfe_form_user_save_description',
-                        'field_acfe_form_user_map_role'         => 'field_acfe_form_user_save_role',
-                    )
-                ),
-            
-            );
-            
-            foreach($args['acfe_form_actions'] as &$row){
-                
-                foreach($rules as $rule){
-                    
-                    $load_values = acf_maybe_get($row, $rule['load_values']);
-                    $fields = $rule['fields'];
-                    
-                    if(!empty($load_values))
-                        continue;
-                    
-                    foreach($fields as $map => $save){
-                        
-                        $map_value = acf_maybe_get($row, $map);
-                        
-                        if(empty($map_value))
-                            continue;
-                        
-                        if($save === 'field_acfe_form_post_save_post_content'){
-                            
-                            $row['field_acfe_form_post_save_post_content_group'][$save] = $map_value;
-                            
-                        }
-                        
-                        elseif($save === 'field_acfe_form_term_save_description'){
-                            
-                            $row['field_acfe_form_term_save_description_group'][$save] = $map_value;
-                            
-                        }
-                        
-                        elseif($save === 'field_acfe_form_user_save_description'){
-                            
-                            $row['field_acfe_form_user_save_description_group'][$save] = $map_value;
-                            
-                        }
-                        
-                        else{
-                            
-                            $row[$save] = $map_value;
-                            
-                        }
-                        
-                    }
-                    
-                }
-                
-            }
-            
-        }
-        
-        return $args;
-        
-    }
-
-    /**
-     * Plugin: Post Types Order
-     * https://wordpress.org/plugins/post-types-order/
-     * The plugin apply custom order to ACF Field Group Post Type. We have to fix this
-     */
-    function pto_acf_field_group($ignore, $orderby, $query){
-        
-        if(is_admin() && $query->is_main_query() && $query->get('post_type') === 'acf-field-group')
-            $ignore = true;
-
-        return $ignore;
-        
-    }
-    
-    /**
-     * Plugin: Post Types Order
-     * https://wordpress.org/plugins/post-types-order/
-     * The plugin apply a drag & drop UI on ACF Field Group UI. We have to fix this
-     */
-    function pto_options_acf_field_group($options){
-        
-        $options['show_reorder_interfaces']['acf-field-group'] = 'hide';
-        
-        return $options;
-        
-    }
-    
-    /**
-     * Plugin: Category Order and Taxonomy Terms Order
-     * https://wordpress.org/plugins/taxonomy-terms-order/
-     * The plugin add a submenu to 'Custom Fields' to order Field Group Categories. It's unecessary
-     */
-    function cotto_submenu(){
-        
-        remove_submenu_page('edit.php?post_type=acf-field-group', 'to-interface-acf-field-group');
-        
-    }
-    
-    /**
-     * Plugin: Rank Math SEO
-     * https://wordpress.org/plugins/seo-by-rank-math/
-     * Fix the plugin post metabox which is always above ACF metaboxes
-     */
-    function rankmath_metaboxes_priority(){
-        
-        return 'default';
-        
-    }
-    
-    /**
-     * Plugin: YOAST SEO
-     * https://wordpress.org/plugins/wordpress-seo/
-     * Fix the plugin post metabox which is always above ACF metaboxes
-     */
-    function yoast_metaboxes_priority(){
-        
-        return 'default';
-        
-    }
-    
-    /**
-     * ACF Extended: 0.8.3
-     * Modules: Enable PolyLang Translation for ACFE Form Module
-     * https://polylang.pro/doc/filter-reference/
-     */
-    function polylang($post_types, $is_settings){
-        
-        if($is_settings){
-            
-            unset($post_types['acfe-form']);
-            unset($post_types['acfe-template']);
-            
-        }else{
-            
-            $post_types['acfe-form'] = 'acfe-form';
-            $post_types['acfe-template'] = 'acfe-template';
-            
-        }
-        
-        return $post_types;
-        
-    }
-    
-    /*
-     * ACF Extended: 0.8.8
-     * Elementor Pro
-     * Fix Elementor listing all private ACF Extended Field Groups in Dynamic ACF Tags options list
-     */
-    function elementor(){
-        
-        add_filter('acf/load_field_groups', function($field_groups){
-            
-            // Hidden Local Field Groups
-            $hidden = acfe_get_setting('reserved_field_groups', array());
-            
-            foreach($field_groups as $i => $field_group){
-                
-                if(!in_array($field_group['key'], $hidden))
-                    continue;
-                
-                unset($field_groups[$i]);
-                
-            }
-    
-            $field_groups = array_values($field_groups);
-            
-            return $field_groups;
-            
-        }, 25);
-        
-    }
-    
-    /*
-     * ACF Extended: 0.8.8.2
-     * WP GraphQL ACF Supported Fields
-     */
-    function wpgraphql_supported_fields($fields){
-        
-        $acfe_fields = array(
-            'acfe_advanced_link',
-            'acfe_code_editor',
-            'acfe_forms',
-            'acfe_hidden',
-            'acfe_post_statuses',
-            'acfe_post_types',
-            'acfe_slug',
-            'acfe_taxonomies',
-            'acfe_taxonomy_terms',
-            'acfe_user_roles',
-        );
-        
-        return array_merge($fields, $acfe_fields);
-        
-    }
-    
-    /*
-     * ACF Extended: 0.8.8.4
-     * WP GraphQL ACF Register Field
-     */
-    function wpgraphql_register_field($field_config, $type_name, $field_name, $config){
-    
-        $acf_field = isset( $config['acf_field'] ) ? $config['acf_field'] : null;
-        $acf_type  = isset( $acf_field['type'] ) ? $acf_field['type'] : null;
-        
-        if($acf_type === 'acfe_advanced_link'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }elseif($acf_type === 'acfe_code_editor'){
-    
-            $field_config['type'] = 'String';
-            
-        }elseif($acf_type === 'acfe_forms'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }elseif($acf_type === 'acfe_hidden'){
-    
-            $field_config['type'] = 'String';
-            
-        }elseif($acf_type === 'acfe_post_statuses'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }elseif($acf_type === 'acfe_post_types'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }elseif($acf_type === 'acfe_slug'){
-    
-            $field_config['type'] = 'String';
-            
-        }elseif($acf_type === 'acfe_taxonomies'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }elseif($acf_type === 'acfe_taxonomy_terms'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }elseif($acf_type === 'acfe_user_roles'){
-    
-            $field_config['type'] = array('list_of' => 'String');
-            
-        }
-        
-        return $field_config;
-        
-    }
-    
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly
 }
 
-new acfe_compatibility();
+if ( ! class_exists( 'ACF_Compatibility' ) ) :
 
-endif;
+	class ACF_Compatibility {
+
+		/**
+		 *  __construct
+		 *
+		 *  Sets up the class functionality.
+		 *
+		 *  @date    30/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   void
+		 *  @return  void
+		 */
+		function __construct() {
+
+			// actions
+			add_filter( 'acf/validate_field', array( $this, 'validate_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=textarea', array( $this, 'validate_textarea_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=relationship', array( $this, 'validate_relationship_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=post_object', array( $this, 'validate_relationship_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=page_link', array( $this, 'validate_relationship_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=image', array( $this, 'validate_image_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=file', array( $this, 'validate_image_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=wysiwyg', array( $this, 'validate_wysiwyg_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=date_picker', array( $this, 'validate_date_picker_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=taxonomy', array( $this, 'validate_taxonomy_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=date_time_picker', array( $this, 'validate_date_time_picker_field' ), 20, 1 );
+			add_filter( 'acf/validate_field/type=user', array( $this, 'validate_user_field' ), 20, 1 );
+			add_filter( 'acf/validate_field_group', array( $this, 'validate_field_group' ), 20, 1 );
+
+			// Modify field wrapper attributes
+			add_filter( 'acf/field_wrapper_attributes', array( $this, 'field_wrapper_attributes' ), 20, 2 );
+
+			// location
+			add_filter( 'acf/location/validate_rule/type=post_taxonomy', array( $this, 'validate_post_taxonomy_location_rule' ), 20, 1 );
+			add_filter( 'acf/location/validate_rule/type=post_category', array( $this, 'validate_post_taxonomy_location_rule' ), 20, 1 );
+
+			// Update settings
+			add_action( 'acf/init', array( $this, 'init' ) );
+		}
+
+		/**
+		 * init
+		 *
+		 * Adds compatibility for deprecated settings.
+		 *
+		 * @date    10/6/19
+		 * @since   5.8.1
+		 *
+		 * @param   void
+		 * @return  void
+		 */
+		function init() {
+
+			// Update "show_admin" setting based on defined constant.
+			if ( defined( 'ACF_LITE' ) && ACF_LITE ) {
+				acf_update_setting( 'show_admin', false );
+			}
+		}
+
+		/**
+		 * field_wrapper_attributes
+		 *
+		 * Adds compatibility with deprecated field wrap attributes.
+		 *
+		 * @date    21/1/19
+		 * @since   5.7.10
+		 *
+		 * @param   array $wrapper The wrapper attributes array.
+		 * @param   array $field The field array.
+		 */
+		function field_wrapper_attributes( $wrapper, $field ) {
+
+			// Check compatibility setting.
+			if ( acf_get_compatibility( 'field_wrapper_class' ) ) {
+				$wrapper['class'] .= " field_type-{$field['type']}";
+				if ( $field['key'] ) {
+					$wrapper['class'] .= " field_key-{$field['key']}";
+				}
+			}
+
+			// Return wrapper.
+			return $wrapper;
+		}
+
+		/**
+		 *  validate_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_field( $field ) {
+
+			// conditional logic data structure changed to groups in version 5.0.0
+			// convert previous data (status, rules, allorany) into groups
+			if ( isset( $field['conditional_logic']['status'] ) ) {
+
+				// check status
+				if ( $field['conditional_logic']['status'] ) {
+					$field['conditional_logic'] = acf_convert_rules_to_groups( $field['conditional_logic']['rules'], $field['conditional_logic']['allorany'] );
+				} else {
+					$field['conditional_logic'] = 0;
+				}
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_textarea_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_textarea_field( $field ) {
+
+			// formatting has been removed
+			$formatting = acf_extract_var( $field, 'formatting' );
+			if ( $formatting === 'br' ) {
+				$field['new_lines'] = 'br';
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_relationship_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_relationship_field( $field ) {
+
+			// remove 'all' from post_type
+			if ( acf_in_array( 'all', $field['post_type'] ) ) {
+				$field['post_type'] = array();
+			}
+
+			// remove 'all' from taxonomy
+			if ( acf_in_array( 'all', $field['taxonomy'] ) ) {
+				$field['taxonomy'] = array();
+			}
+
+			// result_elements is now elements
+			if ( isset( $field['result_elements'] ) ) {
+				$field['elements'] = acf_extract_var( $field, 'result_elements' );
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_image_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_image_field( $field ) {
+
+			// save_format is now return_format
+			if ( isset( $field['save_format'] ) ) {
+				$field['return_format'] = acf_extract_var( $field, 'save_format' );
+			}
+
+			// object is now array
+			if ( $field['return_format'] == 'object' ) {
+				$field['return_format'] = 'array';
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_wysiwyg_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_wysiwyg_field( $field ) {
+
+			// media_upload is now numeric
+			if ( $field['media_upload'] === 'yes' ) {
+				$field['media_upload'] = 1;
+			} elseif ( $field['media_upload'] === 'no' ) {
+				$field['media_upload'] = 0;
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_date_picker_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.0.0
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_date_picker_field( $field ) {
+
+			// date_format has changed to display_format
+			if ( isset( $field['date_format'] ) ) {
+
+				// extract vars
+				$date_format    = $field['date_format'];
+				$display_format = $field['display_format'];
+
+				// convert from js to php
+				$display_format = acf_convert_date_to_php( $display_format );
+
+				// append settings
+				$field['display_format'] = $display_format;
+				$field['save_format']    = $date_format;
+
+				// clean up
+				unset( $field['date_format'] );
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_taxonomy_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.2.7
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_taxonomy_field( $field ) {
+
+			// load_save_terms deprecated in favour of separate save_terms
+			if ( isset( $field['load_save_terms'] ) ) {
+				$field['save_terms'] = acf_extract_var( $field, 'load_save_terms' );
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_date_time_picker_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.2.7
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_date_time_picker_field( $field ) {
+
+			// 3rd party date time picker
+			// https://github.com/soderlind/acf-field-date-time-picker
+			if ( ! empty( $field['time_format'] ) ) {
+
+				// extract vars
+				$time_format      = acf_extract_var( $field, 'time_format' );
+				$date_format      = acf_extract_var( $field, 'date_format' );
+				$get_as_timestamp = acf_extract_var( $field, 'get_as_timestamp' );
+
+				// convert from js to php
+				$time_format = acf_convert_time_to_php( $time_format );
+				$date_format = acf_convert_date_to_php( $date_format );
+
+				// append settings
+				$field['return_format']  = $date_format . ' ' . $time_format;
+				$field['display_format'] = $date_format . ' ' . $time_format;
+
+				// timestamp
+				if ( $get_as_timestamp === 'true' ) {
+					$field['return_format'] = 'U';
+				}
+			}
+
+			// return
+			return $field;
+		}
+
+		/**
+		 *  validate_user_field
+		 *
+		 *  Adds compatibility with deprecated settings
+		 *
+		 *  @date    23/04/2014
+		 *  @since   5.2.7
+		 *
+		 *  @param   array $field The field array.
+		 *  @return  array $field
+		 */
+		function validate_user_field( $field ) {
+
+			// remove 'all' from roles
+			if ( acf_in_array( 'all', $field['role'] ) ) {
+				$field['role'] = '';
+			}
+
+			// field_type removed in favour of multiple
+			if ( isset( $field['field_type'] ) ) {
+
+				// extract vars
+				$field_type = acf_extract_var( $field, 'field_type' );
+
+				// multiple
+				if ( $field_type === 'multi_select' ) {
+					$field['multiple'] = true;
+				}
+			}
+
+			// return
+			return $field;
+		}
+
+		/*
+		*  validate_field_group
+		*
+		*  This function will provide compatibility with ACF4 field groups
+		*
+		*  @type    function
+		*  @date    23/04/2014
+		*  @since   5.0.0
+		*
+		*  @param   $field_group (array)
+		*  @return  $field_group
+		*/
+		function validate_field_group( $field_group ) {
+
+			// vars
+			$version = 5;
+
+			// field group key was added in version 5.0.0
+			// detect ACF4 data and generate key
+			if ( ! $field_group['key'] ) {
+				$version            = 4;
+				$field_group['key'] = isset( $field_group['id'] ) ? "group_{$field_group['id']}" : uniqid( 'group_' );
+			}
+
+			// prior to version 5.0.0, settings were saved in an 'options' array
+			// extract and merge options into the field group
+			if ( isset( $field_group['options'] ) ) {
+				$options     = acf_extract_var( $field_group, 'options' );
+				$field_group = array_merge( $field_group, $options );
+			}
+
+			// location data structure changed to groups in version 4.1.0
+			// convert previous data (rules, allorany) into groups
+			if ( isset( $field_group['location']['rules'] ) ) {
+				$field_group['location'] = acf_convert_rules_to_groups( $field_group['location']['rules'], $field_group['location']['allorany'] );
+			}
+
+			// some location rule names have changed in version 5.0.0
+			// loop over location data and modify rules
+			$replace = array(
+				'taxonomy'    => 'post_taxonomy',
+				'ef_media'    => 'attachment',
+				'ef_taxonomy' => 'taxonomy',
+				'ef_user'     => 'user_role',
+				'user_type'   => 'current_user_role', // 5.2.0
+			);
+
+			// only replace 'taxonomy' rule if is an ACF4 field group
+			if ( $version > 4 ) {
+				unset( $replace['taxonomy'] );
+			}
+
+			// loop over location groups
+			if ( $field_group['location'] ) {
+				foreach ( $field_group['location'] as $i => $group ) {
+
+					// loop over group rules
+					if ( $group ) {
+						foreach ( $group as $j => $rule ) {
+
+							// migrate param
+							if ( isset( $replace[ $rule['param'] ] ) ) {
+								$field_group['location'][ $i ][ $j ]['param'] = $replace[ $rule['param'] ];
+							}
+						}
+					}
+				}
+			}
+
+			// change layout to style (v5.0.0)
+			if ( isset( $field_group['layout'] ) ) {
+				$field_group['style'] = acf_extract_var( $field_group, 'layout' );
+			}
+
+			// change no_box to seamless (v5.0.0)
+			if ( $field_group['style'] === 'no_box' ) {
+				$field_group['style'] = 'seamless';
+			}
+
+			// return
+			return $field_group;
+		}
+
+		/**
+		 *  validate_post_taxonomy_location_rule
+		 *
+		 *  description
+		 *
+		 *  @date    27/8/18
+		 *  @since   5.7.4
+		 *
+		 *  @param   type $var Description. Default.
+		 *  @return  type Description.
+		 */
+		function validate_post_taxonomy_location_rule( $rule ) {
+
+			// previous versions of ACF (v4.4.12) saved value as term_id
+			// convert term_id into "taxonomy:slug" string
+			if ( is_numeric( $rule['value'] ) ) {
+				$term = acf_get_term( $rule['value'] );
+				if ( $term ) {
+					$rule['value'] = acf_encode_term( $term );
+				}
+			}
+
+			// return
+			return $rule;
+		}
+
+	}
+
+	acf_new_instance( 'ACF_Compatibility' );
+
+endif; // class_exists check
+
+/*
+ * acf_get_compatibility
+ *
+ * Returns true if compatibility is enabled for the given component.
+ *
+ * @date    20/1/15
+ * @since   5.1.5
+ *
+ * @param   string $name The name of the component to check.
+ * @return  bool
+ */
+function acf_get_compatibility( $name ) {
+	return apply_filters( "acf/compatibility/{$name}", false );
+}

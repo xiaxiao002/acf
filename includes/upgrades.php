@@ -1,814 +1,545 @@
 <?php
 
-if(!class_exists('acfe_upgrades')):
+/**
+ *  acf_has_upgrade
+ *
+ *  Returns true if this site has an upgrade avaialble.
+ *
+ *  @date    24/8/18
+ *  @since   5.7.4
+ *
+ *  @param   void
+ *  @return  bool
+ */
+function acf_has_upgrade() {
+	$db_version = acf_get_db_version();
 
-class acfe_upgrades{
-    
-    public $upgrades = array(
-        'do_0_8_5' => '0.8.5',
-        'do_0_8_6' => '0.8.6',
-        'do_0_8_8' => '0.8.8',
-        'do_reset' => '0.0',
-    );
-    
-    public $model = array(
-        'version' => ACFE_VERSION,
-        'modules' => array(
-            'block_types'   => array(),
-            'options_pages' => array(),
-            'post_types'    => array(),
-            'taxonomies'    => array(),
-        )
-    );
+	if ( $db_version && acf_version_compare( $db_version, '<', ACF_UPGRADE_VERSION ) ) {
+		return true;
+	}
 
-    function __construct(){
-        
-        $db_version = acfe_get_settings('version');
-        
-        // Bail early
-        if(acf_version_compare($db_version, '>=', ACFE_VERSION))
-            return;
-        
-        // Loop upgrades
-        foreach($this->upgrades as $upgrade_function => $upgrade_version){
-            
-            if(acf_version_compare($upgrade_version, '<=', $db_version))
-                continue;
-            
-            add_action('acf/init', array($this, $upgrade_function), 999);
-            
-        }
-        
-        $settings = acfe_get_settings();
-        
-        $model = $this->parse_args_r($settings, $this->model);
-        $model['version'] = ACFE_VERSION;
-        
-        acfe_update_settings($model);
-        
-    }
-    
-    /*
-     * Reset Modules
-     */
-    function do_reset(){
-        
-        // Modules
-        acf_get_instance('acfe_dynamic_block_types')->reset();
-        acf_get_instance('acfe_dynamic_options_pages')->reset();
-        acf_get_instance('acfe_dynamic_post_types')->reset();
-        acf_get_instance('acfe_dynamic_taxonomies')->reset();
-        
-    }
-    
-    /*
-     * ACF Extended: 0.8.8
-     */
-    function do_0_8_8(){
-        
-        $tasks = array(
-            'block_types',
-            'options_pages',
-            'post_types',
-            'taxonomies',
-            'clean',
-        );
-        
-        foreach($tasks as $task){
-    
-            /*
-             * Block Types
-             */
-            if($task === 'block_types'){
-        
-                $old = acfe_get_settings('modules.dynamic_block_type.data', array());
-                $new = acfe_get_settings('modules.block_types', array());
-        
-                // Check
-                if(empty($old))
-                    continue;
-    
-                // Log
-                acf_log('[ACF Extended] 0.8.8 Upgrade: Block Types');
-        
-                // Update
-                acfe_update_settings('modules.block_types', array_merge($old, $new));
-        
-            }
-            
-            /*
-             * Options Pages
-             */
-            elseif($task === 'options_pages'){
-                
-                $old = acfe_get_settings('modules.dynamic_option.data', array());
-                $new = acfe_get_settings('modules.options_pages', array());
-                
-                // Check
-                if(empty($old))
-                    continue;
-                
-                // Log
-                acf_log('[ACF Extended] 0.8.8 Upgrade: Options Pages');
-        
-                // Update
-                acfe_update_settings('modules.options_pages', array_merge($old, $new));
-        
-            }
-            
-            /*
-             * Post Types
-             */
-            elseif($task === 'post_types'){
-                
-                $old = acfe_get_settings('modules.dynamic_post_type.data', array());
-                $new = acfe_get_settings('modules.post_types', array());
-                
-                // Check
-                if(empty($old))
-                    continue;
-                
-                // Log
-                acf_log('[ACF Extended] 0.8.8 Upgrade: Post Types');
-        
-                // Update
-                acfe_update_settings('modules.post_types', array_merge($old, $new));
-        
-            }
-            
-            /*
-             * Taxonomies
-             */
-            elseif($task === 'taxonomies'){
-                
-                $old = acfe_get_settings('modules.dynamic_taxonomy.data', array());
-                $new = acfe_get_settings('modules.taxonomies', array());
-                
-                // Check
-                if(empty($old))
-                    continue;
-                
-                // Log
-                acf_log('[ACF Extended] 0.8.8 Upgrade: Taxonomies');
-        
-                // Update
-                acfe_update_settings('modules.taxonomies', array_merge($old, $new));
-        
-            }
-            
-            /*
-             * Clean
-             */
-            elseif($task === 'clean'){
-    
-                acfe_delete_settings('modules.author');
-                acfe_delete_settings('modules.dev');
-                acfe_delete_settings('modules.meta');
-                acfe_delete_settings('modules.option');
-                acfe_delete_settings('modules.ui');
-                acfe_delete_settings('modules.dynamic_block_type');
-                acfe_delete_settings('modules.dynamic_form');
-                acfe_delete_settings('modules.dynamic_option');
-                acfe_delete_settings('modules.dynamic_post_type');
-                acfe_delete_settings('modules.dynamic_taxonomy');
-                acfe_delete_settings('upgrades');
-        
-            }
-            
-        }
-        
-    }
-    
-    /*
-     * ACF Extended: 0.8.6
-     */
-    function do_0_8_6(){
-        
-        $get_options = get_posts(array(
-            'post_type'         => 'acfe-dop',
-            'posts_per_page'    => -1,
-            'fields'            => 'ids'
-        ));
-        
-        if(!empty($get_options)){
-            
-            $updated = false;
-            
-            foreach($get_options as $post_id){
-                
-                $menu_slug = get_field('menu_slug', $post_id);
-                $acfe_dop_name = get_field('acfe_dop_name', $post_id);
-                $post_name = get_post_field('post_name', $post_id);
-                
-                // Update empty 'menu_slug' fields in options pages
-                if(empty($menu_slug)){
-                    
-                    // Page Title
-                    $page_title = get_post_field('post_title', $post_id);
-                    
-                    // Menu Title
-                    $menu_title = get_field('menu_title', $post_id);
-                    
-                    if(empty($menu_title)){
-                        
-                        $menu_title = $page_title;
-                        
-                    }
-                    
-                    // Menu Slug
-                    $menu_slug = sanitize_title($menu_title);
-                    
-                    // Update field
-                    update_field('menu_slug', $menu_slug, $post_id);
-                    
-                    $updated = true;
-                    
-                }
-                
-                // Upgrade old name to menu_slug
-                if($acfe_dop_name === $post_name){
-                    
-                    // Get ACFE option
-                    $option = acfe_get_settings('modules.options_pages', array());
-                    
-                    // Check ACFE option
-                    if(isset($option[$acfe_dop_name])){
-                        
-                        $register_args = $option[$acfe_dop_name];
-                        
-                        // Delete old option page slug
-                        unset($option[$acfe_dop_name]);
-                        
-                        // Re-assign to menu_slug
-                        $option[$menu_slug] = $register_args;
-                        
-                        // Sort keys ASC
-                        ksort($option);
-                        
-                        // Update ACFE option
-                        acfe_update_settings('modules.options_pages', $option);
-                        
-                        // Update post: force menu slug as name
-                        wp_update_post(array(
-                            'ID'            => $post_id,
-                            'post_name'     => $menu_slug,
-                        ));
-                        
-                        $updated = true;
-                        
-                    }
-                    
-                }
-                
-            }
-            
-            if($updated)
-                acf_log('[ACF Extended] 0.8.6 Upgrade: Options Pages');
-            
-        }
-        
-    }
-    
-    /*
-     * ACF Extended: 0.8.5
-     */
-    function do_0_8_5(){
-        
-        $tasks = array(
-            'forms',
-            'post_types',
-            'taxonomies',
-            'block_types',
-            'options_pages',
-        );
-        
-        foreach($tasks as $task){
-            
-            /*
-             * Forms
-             */
-            if($task === 'forms'){
-                
-                // Retrieve all forms posts
-                $get_forms = get_posts(array(
-                    'post_type'         => 'acfe-form',
-                    'posts_per_page'    => -1,
-                    'fields'            => 'ids',
-                    'post_status'       => 'any'
-                ));
-                
-                // Bail early if no form found
-                if(empty($get_forms))
-                    continue;
-                
-                $flexible = acf_get_field_type('flexible_content');
-                $field = acf_get_field('acfe_form_actions');
-                
-                global $wpdb;
-                
-                foreach($get_forms as $post_id){
-                    
-                    // init
-                    $wp_meta = array();
-                    $acf_meta = array();
-                    
-                    // Retrieve meta
-                    $get_meta = $wpdb->get_results($wpdb->prepare("SELECT * FROM $wpdb->postmeta WHERE post_id = %d ", $post_id));
-                    
-                    // Sort
-                    usort($get_meta, function($a, $b){
-                        return strcmp($a->meta_key, $b->meta_key);
-                    });
-                    
-                    // Store
-                    foreach($get_meta as $meta){
-                        
-                        $wp_meta[$meta->meta_key] = $meta->meta_value;
-                        
-                    }
-                    
-                    // Check if is acf meta
-                    foreach($wp_meta as $key => $value){
-                        
-                        // ACF Meta
-                        if(isset($wp_meta["_$key"])){
-                            
-                            $acf_meta[] = array(
-                                'key'   => $key,
-                                'value' => $wp_meta[$key],
-                            );
-                            
-                        }
-                        
-                    }
-                    
-                    /*
-                     * Step 1: Upgrade old group fields
-                     */
-                    $prefix = 'acfe_form_actions';
-                    
-                    // Define script rules
-                    $rules = array(
-                        
-                        // Post: title
-                        array(
-                            'group'             => 'acfe_form_post_save_post_title_group',
-                            'sub_field'         => 'acfe_form_post_save_post_title_group_acfe_form_post_save_post_title',
-                            'sub_field_custom'  => 'acfe_form_post_save_post_title_group_acfe_form_post_save_post_title_custom',
-                            'new_field'         => 'acfe_form_post_save_post_title',
-                        ),
-                        
-                        // Post: name
-                        array(
-                            'group'             => 'acfe_form_post_save_post_name_group',
-                            'sub_field'         => 'acfe_form_post_save_post_name_group_acfe_form_post_save_post_name',
-                            'sub_field_custom'  => 'acfe_form_post_save_post_name_group_acfe_form_post_save_post_name_custom',
-                            'new_field'         => 'acfe_form_post_save_post_name',
-                        ),
-                        
-                        // Term: name
-                        array(
-                            'group'             => 'acfe_form_term_save_name_group',
-                            'sub_field'         => 'acfe_form_term_save_name_group_acfe_form_term_save_name',
-                            'sub_field_custom'  => 'acfe_form_term_save_name_group_acfe_form_term_save_name_custom',
-                            'new_field'         => 'acfe_form_term_save_name',
-                        ),
-                        
-                        // Term: slug
-                        array(
-                            'group'             => 'acfe_form_term_save_slug_group',
-                            'sub_field'         => 'acfe_form_term_save_slug_group_acfe_form_term_save_slug',
-                            'sub_field_custom'  => 'acfe_form_term_save_slug_group_acfe_form_term_save_slug_custom',
-                            'new_field'         => 'acfe_form_term_save_slug',
-                        ),
-                        
-                        // User: e-mail
-                        array(
-                            'group'             => 'acfe_form_user_save_email_group',
-                            'sub_field'         => 'acfe_form_user_save_email_group_acfe_form_user_save_email',
-                            'sub_field_custom'  => 'acfe_form_user_save_email_group_acfe_form_user_save_email_custom',
-                            'new_field'         => 'acfe_form_user_save_email',
-                        ),
-                        
-                        // User: username
-                        array(
-                            'group'             => 'acfe_form_user_save_username_group',
-                            'sub_field'         => 'acfe_form_user_save_username_group_acfe_form_user_save_username',
-                            'sub_field_custom'  => 'acfe_form_user_save_username_group_acfe_form_user_save_username_custom',
-                            'new_field'         => 'acfe_form_user_save_username',
-                        ),
-                        
-                        // User: password
-                        array(
-                            'group'             => 'acfe_form_user_save_password_group',
-                            'sub_field'         => 'acfe_form_user_save_password_group_acfe_form_user_save_password',
-                            'sub_field_custom'  => 'acfe_form_user_save_password_group_acfe_form_user_save_password_custom',
-                            'new_field'         => 'acfe_form_user_save_password',
-                        ),
-                        
-                        // User: first name
-                        array(
-                            'group'             => 'acfe_form_user_save_first_name_group',
-                            'sub_field'         => 'acfe_form_user_save_first_name_group_acfe_form_user_save_first_name',
-                            'sub_field_custom'  => 'acfe_form_user_save_first_name_group_acfe_form_user_save_first_name_custom',
-                            'new_field'         => 'acfe_form_user_save_first_name',
-                        ),
-                        
-                        // User: last name
-                        array(
-                            'group'             => 'acfe_form_user_save_last_name_group',
-                            'sub_field'         => 'acfe_form_user_save_last_name_group_acfe_form_user_save_last_name',
-                            'sub_field_custom'  => 'acfe_form_user_save_last_name_group_acfe_form_user_save_last_name_custom',
-                            'new_field'         => 'acfe_form_user_save_last_name',
-                        ),
-                        
-                        // User: nickname
-                        array(
-                            'group'             => 'acfe_form_user_save_nickname_group',
-                            'sub_field'         => 'acfe_form_user_save_nickname_group_acfe_form_user_save_nickname',
-                            'sub_field_custom'  => 'acfe_form_user_save_nickname_group_acfe_form_user_save_nickname_custom',
-                            'new_field'         => 'acfe_form_user_save_nickname',
-                        ),
-                        
-                        // User: display name
-                        array(
-                            'group'             => 'acfe_form_user_save_display_name_group',
-                            'sub_field'         => 'acfe_form_user_save_display_name_group_acfe_form_user_save_display_name',
-                            'sub_field_custom'  => 'acfe_form_user_save_display_name_group_acfe_form_user_save_display_name_custom',
-                            'new_field'         => 'acfe_form_user_save_display_name',
-                        ),
-                        
-                        // User: website
-                        array(
-                            'group'             => 'acfe_form_user_save_website_group',
-                            'sub_field'         => 'acfe_form_user_save_website_group_acfe_form_user_save_website',
-                            'sub_field_custom'  => 'acfe_form_user_save_website_group_acfe_form_user_save_website_custom',
-                            'new_field'         => 'acfe_form_user_save_website',
-                        ),
-                    
-                    );
-                    
-                    // Process rules
-                    foreach($rules as $rule){
-                        
-                        $updates = array();
-                        
-                        foreach($acf_meta as $acf){
-                            
-                            // Bail early if doesn't starts with 'acfe_form_actions'
-                            if(strpos($acf['key'], $prefix) !== 0)
-                                continue;
-                            
-                            // Regex: 'acfe_form_actions_2_acfe_form_post_save_post_title_group'
-                            // Match: '2'
-                            if(preg_match('/^' . $prefix . '_([0-9]+)_' . $rule['group'] . '$/', $acf['key'], $match)){
-                                
-                                $updates[$rule['new_field']][$match[1]]['group'] = array(
-                                    'key'   => $acf['key'],
-                                    'value' => $acf['value'],
-                                );
-                                
-                            // Regex: 'acfe_form_post_2_save_post_title_group_acfe_form_post_save_post_title'
-                            // Match: '2'
-                            }elseif(preg_match('/^' . $prefix . '_([0-9]+)_' . $rule['sub_field'] . '$/', $acf['key'], $match)){
-                                
-                                $updates[$rule['new_field']][$match[1]]['sub_field'] = array(
-                                    'key'   => $acf['key'],
-                                    'value' => $acf['value'],
-                                );
-                                
-                            // Regex: 'acfe_form_post_2_save_post_title_group_acfe_form_post_save_post_title_custom'
-                            // Match: '2'
-                            }elseif(preg_match('/^' . $prefix . '_([0-9]+)_' . $rule['sub_field_custom'] . '$/', $acf['key'], $match)){
-                                
-                                // Generate: array[acfe_form_post_save_post_title][2]['sub_field_custom']
-                                $updates[$rule['new_field']][$match[1]]['sub_field_custom'] = array(
-                                    'key'   => $acf['key'],
-                                    'value' => $acf['value'],
-                                );
-                                
-                            }
-                            
-                        }
-                        
-                        if(!empty($updates)){
-                            
-                            acf_log('[ACF Extended] 0.8.5 Upgrade: Forms');
-                            
-                            // Update meta
-                            foreach($updates as $new_field => $data){
-                                
-                                foreach($data as $i => $row){
-                                    
-                                    $group = acf_maybe_get($row, 'group');
-                                    $sub_field = acf_maybe_get($row, 'sub_field');
-                                    $sub_field_custom = acf_maybe_get($row, 'sub_field_custom');
-                                    
-                                    if($sub_field){
-                                        
-                                        $new_field_name = "{$prefix}_{$i}_{$new_field}";
-                                        
-                                        // update field
-                                        if($sub_field['value'] === 'custom'){
-                                            
-                                            update_post_meta($post_id, $new_field_name, $sub_field_custom['value']);
-                                            
-                                        }else{
-                                            
-                                            update_post_meta($post_id, $new_field_name, $sub_field['value']);
-                                            
-                                        }
-                                        
-                                        // update reference
-                                        update_post_meta($post_id, '_' . $new_field_name, 'field_' . $new_field);
-                                        
-                                    }
-                                    
-                                    // Delete old group
-                                    delete_post_meta($post_id, $group['key']);
-                                    delete_post_meta($post_id, $sub_field['key']);
-                                    delete_post_meta($post_id, $sub_field_custom['key']);
-                                    
-                                }
-                                
-                            }
-                            
-                        }
-                        
-                    }
-                    
-                    /*
-                     * Step 2: Upgrade map fields which now require "Load values" to be enabled
-                     */
-                    if(have_rows('acfe_form_actions', $post_id)):
-                        while(have_rows('acfe_form_actions', $post_id)): the_row();
-                            
-                            $layout = get_row_layout();
-                            $row = get_row_index();
-                            $i = $row-1;
-                            
-                            // Post Action
-                            if($layout === 'post'){
-                                
-                                $load_values = get_sub_field('acfe_form_post_load_values');
-                                
-                                $fields = array(
-                                    'field_acfe_form_post_save_post_type'       => get_sub_field('acfe_form_post_map_post_type', false),
-                                    'field_acfe_form_post_save_post_status'     => get_sub_field('acfe_form_post_map_post_status', false),
-                                    'field_acfe_form_post_save_post_title'      => get_sub_field('acfe_form_post_map_post_title', false),
-                                    'field_acfe_form_post_save_post_name'       => get_sub_field('acfe_form_post_map_post_name', false),
-                                    'field_acfe_form_post_save_post_content'    => get_sub_field('acfe_form_post_map_post_content', false),
-                                    'field_acfe_form_post_save_post_author'     => get_sub_field('acfe_form_post_map_post_author', false),
-                                    'field_acfe_form_post_save_post_parent'     => get_sub_field('acfe_form_post_map_post_parent', false),
-                                    'field_acfe_form_post_save_post_terms'      => get_sub_field('acfe_form_post_map_post_terms', false),
-                                );
-                                
-                                if(!$load_values){
-                                    
-                                    foreach($fields as $field_key => $field_value){
-                                        
-                                        // Bail early if map field has no value
-                                        if(empty($field_value))
-                                            continue;
-                                        
-                                        // args
-                                        $update = array();
-                                        $update['acf_fc_layout'] = $layout;
-                                        
-                                        // Post content inside group
-                                        if($field_key === 'field_acfe_form_post_save_post_content'){
-                                            
-                                            $update['field_acfe_form_post_save_post_content_group'] = array(
-                                                'field_acfe_form_post_save_post_content' => $field_value
-                                            );
-                                            
-                                        }else{
-                                            
-                                            $update[$field_key] = $field_value;
-                                            
-                                        }
-                                        
-                                        // update
-                                        $flexible->update_row($update, $i, $field, $post_id);
-                                        
-                                    }
-                                    
-                                }
-                                
-                            }
-                            
-                            // Term Action
-                            elseif($layout === 'term'){
-                                
-                                $load_values = get_sub_field('acfe_form_term_load_values');
-                                
-                                $fields = array(
-                                    'field_acfe_form_term_save_name'         => get_sub_field('acfe_form_term_map_name', false),
-                                    'field_acfe_form_term_save_slug'         => get_sub_field('acfe_form_term_map_slug', false),
-                                    'field_acfe_form_term_save_taxonomy'     => get_sub_field('acfe_form_term_map_taxonomy', false),
-                                    'field_acfe_form_term_save_parent'       => get_sub_field('acfe_form_term_map_parent', false),
-                                    'field_acfe_form_term_save_description'  => get_sub_field('acfe_form_term_map_description', false),
-                                );
-                                
-                                if(!$load_values){
-                                    
-                                    foreach($fields as $field_key => $field_value){
-                                        
-                                        // Bail early if map field has no value
-                                        if(empty($field_value))
-                                            continue;
-                                        
-                                        // args
-                                        $update = array();
-                                        $update['acf_fc_layout'] = $layout;
-                                        
-                                        // Post content inside group
-                                        if($field_key === 'field_acfe_form_term_save_description'){
-                                            
-                                            $update['field_acfe_form_term_save_description_group'] = array(
-                                                'field_acfe_form_term_save_description' => $field_value
-                                            );
-                                            
-                                        }else{
-                                            
-                                            $update[$field_key] = $field_value;
-                                            
-                                        }
-                                        
-                                        // update
-                                        $flexible->update_row($update, $i, $field, $post_id);
-                                        
-                                    }
-                                    
-                                }
-                                
-                            }
-                            
-                            // User Action
-                            elseif($layout === 'user'){
-                                
-                                $load_values = get_sub_field('acfe_form_user_load_values');
-                                
-                                $fields = array(
-                                    'field_acfe_form_user_save_email'           => get_sub_field('acfe_form_user_map_email', false),
-                                    'field_acfe_form_user_save_username'        => get_sub_field('acfe_form_user_map_username', false),
-                                    'field_acfe_form_user_save_password'        => get_sub_field('acfe_form_user_map_password', false),
-                                    'field_acfe_form_user_save_first_name'      => get_sub_field('acfe_form_user_map_first_name', false),
-                                    'field_acfe_form_user_save_last_name'       => get_sub_field('acfe_form_user_map_last_name', false),
-                                    'field_acfe_form_user_save_nickname'        => get_sub_field('acfe_form_user_map_nickname', false),
-                                    'field_acfe_form_user_save_display_name'    => get_sub_field('acfe_form_user_map_display_name', false),
-                                    'field_acfe_form_user_save_website'         => get_sub_field('acfe_form_user_map_website', false),
-                                    'field_acfe_form_user_save_description'     => get_sub_field('acfe_form_user_map_description', false),
-                                    'field_acfe_form_user_save_role'            => get_sub_field('acfe_form_user_map_role', false),
-                                );
-                                
-                                if(!$load_values){
-                                    
-                                    foreach($fields as $field_key => $field_value){
-                                        
-                                        // Bail early if map field has no value
-                                        if(empty($field_value))
-                                            continue;
-                                        
-                                        // args
-                                        $update = array();
-                                        $update['acf_fc_layout'] = $layout;
-                                        
-                                        // Post content inside group
-                                        if($field_key === 'field_acfe_form_user_save_description'){
-                                            
-                                            $update['field_acfe_form_user_save_description_group'] = array(
-                                                'field_acfe_form_user_save_description' => $field_value
-                                            );
-                                            
-                                        }else{
-                                            
-                                            $update[$field_key] = $field_value;
-                                            
-                                        }
-                                        
-                                        // update
-                                        $flexible->update_row($update, $i, $field, $post_id);
-                                        
-                                    }
-                                    
-                                }
-                                
-                            }
-                        
-                        endwhile;
-                    endif;
-                    
-                }
-                
-            }
-            
-            /*
-             * Post Types
-             */
-            elseif($task === 'post_types'){
-                
-                $old = get_option('acfe_dynamic_post_types', array());
-                $new = acfe_get_settings('modules.post_types', array());
-                
-                delete_option('acfe_dynamic_post_types');
-                
-                if(empty($old))
-                    continue;
-                
-                acf_log('[ACF Extended] 0.8.5 Upgrade: Post Types');
-                
-                // Update
-                acfe_update_settings('modules.post_types', array_merge($old, $new));
-                
-            }
-            
-            /*
-             * Taxonomies
-             */
-            elseif($task === 'taxonomies'){
-                
-                $old = get_option('acfe_dynamic_taxonomies', array());
-                $new = acfe_get_settings('modules.taxonomies', array());
-                
-                delete_option('acfe_dynamic_taxonomies');
-                
-                if(empty($old))
-                    continue;
-                
-                acf_log('[ACF Extended] 0.8.5 Upgrade: Taxonomies');
-                
-                // Update
-                acfe_update_settings('modules.taxonomies', array_merge($old, $new));
-                
-            }
-            
-            /*
-             * Block Types
-             */
-            elseif($task === 'block_types'){
-                
-                $old = get_option('acfe_dynamic_block_types', array());
-                $new = acfe_get_settings('modules.block_types', array());
-                
-                delete_option('acfe_dynamic_block_types');
-                
-                if(empty($old))
-                    continue;
-                
-                acf_log('[ACF Extended] 0.8.5 Upgrade: Block Types');
-                
-                // Update
-                acfe_update_settings('modules.block_types', array_merge($old, $new));
-                
-            }
-            
-            /*
-             * Option Pages
-             */
-            elseif($task === 'options_pages'){
-                
-                $old = get_option('acfe_dynamic_options_pages', array());
-                $new = acfe_get_settings('modules.options_pages', array());
-                
-                delete_option('acfe_dynamic_options_pages');
-                
-                if(empty($old))
-                    continue;
-                
-                acf_log('[ACF Extended] 0.8.5 Upgrade: Options Pages');
-                
-                // Update
-                acfe_update_settings('modules.options_pages', array_merge($old, $new));
-                
-            }
-            
-        }
-        
-    }
-    
-    function parse_args_r(&$a, $b){
-        
-        $a = (array) $a;
-        $b = (array) $b;
-        $r = $b;
-        
-        foreach($a as $k => &$v){
-            
-            if(is_array($v) && isset($r[ $k ])){
-                $r[$k] = $this->parse_args_r($v, $r[ $k ]);
-            }else{
-                $r[$k] = $v;
-            }
-            
-        }
-        
-        return $r;
-        
-    }
-    
+	if ( $db_version !== ACF_VERSION ) {
+		acf_update_db_version( ACF_VERSION );
+	}
+
+	return false;
 }
 
-acf_new_instance('acfe_upgrades');
+/**
+ *  Runs upgrade routines if this site has an upgrade available.
+ *
+ *  @date  24/8/18
+ *  @since 5.7.4
+ */
+function acf_upgrade_all() {
+	// Increase time limit if possible.
+	if ( function_exists( 'set_time_limit' ) ) {
+		set_time_limit( 600 );
+	}
 
-endif;
+	// start timer
+	timer_start();
+
+	// log
+	acf_dev_log( 'ACF Upgrade Begin.' );
+
+	// vars
+	$db_version = acf_get_db_version();
+
+	// 5.0.0
+	if ( acf_version_compare( $db_version, '<', '5.0.0' ) ) {
+		acf_upgrade_500();
+	}
+
+	// 5.5.0
+	if ( acf_version_compare( $db_version, '<', '5.5.0' ) ) {
+		acf_upgrade_550();
+	}
+
+	/**
+	 * When adding new upgrade routines here, increment the ACF_UPGRADE_VERSION
+	 * constant in `acf.php` to the new highest upgrade version.
+	 */
+
+	// upgrade DB version once all updates are complete
+	acf_update_db_version( ACF_VERSION );
+
+	if ( is_multisite() ) {
+		// Clears the network upgrade notification banner after site upgrades.
+		delete_site_transient( 'acf_network_upgrade_needed_' . ACF_UPGRADE_VERSION );
+	}
+
+	// log
+	global $wpdb;
+	acf_dev_log( 'ACF Upgrade Complete.', $wpdb->num_queries, timer_stop( 0 ) );
+}
+
+/**
+ *  acf_get_db_version
+ *
+ *  Returns the ACF DB version.
+ *
+ *  @date    10/09/2016
+ *  @since   5.4.0
+ *
+ *  @param   void
+ *  @return  string
+ */
+function acf_get_db_version() {
+	return get_option( 'acf_version' );
+}
+
+/*
+*  acf_update_db_version
+*
+*  Updates the ACF DB version.
+*
+*  @date    10/09/2016
+*  @since   5.4.0
+*
+*  @param   string $version The new version.
+*  @return  void
+*/
+function acf_update_db_version( $version = '' ) {
+	update_option( 'acf_version', $version );
+}
+
+/**
+ *  acf_upgrade_500
+ *
+ *  Version 5 introduces new post types for field groups and fields.
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   void
+ *  @return  void
+ */
+function acf_upgrade_500() {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.0.0.' );
+
+	// action
+	do_action( 'acf/upgrade_500' );
+
+	// do tasks
+	acf_upgrade_500_field_groups();
+
+	// update version
+	acf_update_db_version( '5.0.0' );
+}
+
+/**
+ *  acf_upgrade_500_field_groups
+ *
+ *  Upgrades all ACF4 field groups to ACF5
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   void
+ *  @return  void
+ */
+function acf_upgrade_500_field_groups() {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.0.0 Field Groups.' );
+
+	// get old field groups
+	$ofgs = get_posts(
+		array(
+			'numberposts'      => -1,
+			'post_type'        => 'acf',
+			'orderby'          => 'menu_order title',
+			'order'            => 'asc',
+			'suppress_filters' => true,
+		)
+	);
+
+	// loop
+	if ( $ofgs ) {
+		foreach ( $ofgs as $ofg ) {
+			acf_upgrade_500_field_group( $ofg );
+		}
+	}
+}
+
+/**
+ *  acf_upgrade_500_field_group
+ *
+ *  Upgrades a ACF4 field group to ACF5
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   object $ofg The old field group post object.
+ *  @return  array $nfg  The new field group array.
+ */
+function acf_upgrade_500_field_group( $ofg ) {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.0.0 Field Group.', $ofg );
+
+	// vars
+	$nfg = array(
+		'ID'         => 0,
+		'title'      => $ofg->post_title,
+		'menu_order' => $ofg->menu_order,
+	);
+
+	// construct the location rules
+	$rules    = get_post_meta( $ofg->ID, 'rule', false );
+	$anyorall = get_post_meta( $ofg->ID, 'allorany', true );
+	if ( is_array( $rules ) ) {
+
+		// if field group was duplicated, rules may be a serialized string!
+		$rules = array_map( 'maybe_unserialize', $rules );
+
+		// convert rules to groups
+		$nfg['location'] = acf_convert_rules_to_groups( $rules, $anyorall );
+	}
+
+	// settings
+	if ( $position = get_post_meta( $ofg->ID, 'position', true ) ) {
+		$nfg['position'] = $position;
+	}
+
+	if ( $layout = get_post_meta( $ofg->ID, 'layout', true ) ) {
+		$nfg['layout'] = $layout;
+	}
+
+	if ( $hide_on_screen = get_post_meta( $ofg->ID, 'hide_on_screen', true ) ) {
+		$nfg['hide_on_screen'] = maybe_unserialize( $hide_on_screen );
+	}
+
+	// save field group
+	// acf_upgrade_field_group will call the acf_get_valid_field_group function and apply 'compatibility' changes
+	$nfg = acf_update_field_group( $nfg );
+
+	// log
+	acf_dev_log( '> Complete.', $nfg );
+
+	// action for 3rd party
+	do_action( 'acf/upgrade_500_field_group', $nfg, $ofg );
+
+	// upgrade fields
+	acf_upgrade_500_fields( $ofg, $nfg );
+
+	// trash?
+	if ( $ofg->post_status == 'trash' ) {
+		acf_trash_field_group( $nfg['ID'] );
+	}
+
+	// return
+	return $nfg;
+}
+
+/**
+ *  acf_upgrade_500_fields
+ *
+ *  Upgrades all ACF4 fields to ACF5 from a specific field group
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   object $ofg The old field group post object.
+ *  @param   array  $nfg  The new field group array.
+ *  @return  void
+ */
+function acf_upgrade_500_fields( $ofg, $nfg ) {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.0.0 Fields.' );
+
+	// global
+	global $wpdb;
+
+	// get field from postmeta
+	$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $wpdb->postmeta WHERE post_id = %d AND meta_key LIKE %s", $ofg->ID, 'field_%' ), ARRAY_A );
+
+	// check
+	if ( $rows ) {
+
+		// vars
+		$checked = array();
+
+		// loop
+		foreach ( $rows as $row ) {
+
+			// vars
+			$field = $row['meta_value'];
+			$field = maybe_unserialize( $field );
+			$field = maybe_unserialize( $field ); // run again for WPML
+
+			// bail early if key already migrated (potential duplicates in DB)
+			if ( isset( $checked[ $field['key'] ] ) ) {
+				continue;
+			}
+			$checked[ $field['key'] ] = 1;
+
+			// add parent
+			$field['parent'] = $nfg['ID'];
+
+			// migrate field
+			$field = acf_upgrade_500_field( $field );
+		}
+	}
+}
+
+/**
+ *  acf_upgrade_500_field
+ *
+ *  Upgrades a ACF4 field to ACF5
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   array $field The old field.
+ *  @return  array $field The new field.
+ */
+function acf_upgrade_500_field( $field ) {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.0.0 Field.', $field );
+
+	// order_no is now menu_order
+	$field['menu_order'] = acf_extract_var( $field, 'order_no', 0 );
+
+	// correct very old field keys (field2 => field_2)
+	if ( substr( $field['key'], 0, 6 ) !== 'field_' ) {
+		$field['key'] = 'field_' . str_replace( 'field', '', $field['key'] );
+	}
+
+	// extract sub fields
+	$sub_fields = array();
+	if ( $field['type'] == 'repeater' ) {
+
+		// loop over sub fields
+		if ( ! empty( $field['sub_fields'] ) ) {
+			foreach ( $field['sub_fields'] as $sub_field ) {
+				$sub_fields[] = $sub_field;
+			}
+		}
+
+		// remove sub fields from field
+		unset( $field['sub_fields'] );
+
+	} elseif ( $field['type'] == 'flexible_content' ) {
+
+		// loop over layouts
+		if ( is_array( $field['layouts'] ) ) {
+			foreach ( $field['layouts'] as $i => $layout ) {
+
+				// generate key
+				$layout['key'] = uniqid( 'layout_' );
+
+				// loop over sub fields
+				if ( ! empty( $layout['sub_fields'] ) ) {
+					foreach ( $layout['sub_fields'] as $sub_field ) {
+						$sub_field['parent_layout'] = $layout['key'];
+						$sub_fields[]               = $sub_field;
+					}
+				}
+
+				// remove sub fields from layout
+				unset( $layout['sub_fields'] );
+
+				// update
+				$field['layouts'][ $i ] = $layout;
+
+			}
+		}
+	}
+
+	// save field
+	$field = acf_update_field( $field );
+
+	// log
+	acf_dev_log( '> Complete.', $field );
+
+	// sub fields
+	if ( $sub_fields ) {
+		foreach ( $sub_fields as $sub_field ) {
+			$sub_field['parent'] = $field['ID'];
+			acf_upgrade_500_field( $sub_field );
+		}
+	}
+
+	// action for 3rd party
+	do_action( 'acf/update_500_field', $field );
+
+	// return
+	return $field;
+}
+
+/**
+ *  acf_upgrade_550
+ *
+ *  Version 5.5 adds support for the wp_termmeta table added in WP 4.4.
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   void
+ *  @return  void
+ */
+function acf_upgrade_550() {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.5.0.' );
+
+	// action
+	do_action( 'acf/upgrade_550' );
+
+	// do tasks
+	acf_upgrade_550_termmeta();
+
+	// update version
+	acf_update_db_version( '5.5.0' );
+}
+
+/**
+ *  acf_upgrade_550_termmeta
+ *
+ *  Upgrades all ACF4 termmeta saved in wp_options to the wp_termmeta table.
+ *
+ *  @date    23/8/18
+ *  @since   5.7.4
+ *
+ *  @param   void
+ *  @return  void
+ */
+function acf_upgrade_550_termmeta() {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.5.0 Termmeta.' );
+
+	// bail early if no wp_termmeta table
+	if ( get_option( 'db_version' ) < 34370 ) {
+		return;
+	}
+
+	// get all taxonomies
+	$taxonomies = get_taxonomies( false, 'objects' );
+
+	// loop
+	if ( $taxonomies ) {
+		foreach ( $taxonomies as $taxonomy ) {
+			acf_upgrade_550_taxonomy( $taxonomy->name );
+		}
+	}
+
+	// action for 3rd party
+	do_action( 'acf/upgrade_550_termmeta' );
+}
+
+/*
+*  acf_wp_upgrade_550_termmeta
+*
+*  When the database is updated to support term meta, migrate ACF term meta data across.
+*
+*  @date    23/8/18
+*  @since   5.7.4
+*
+*  @param   string $wp_db_version The new $wp_db_version.
+*  @param   string $wp_current_db_version The old (current) $wp_db_version.
+*  @return  void
+*/
+function acf_wp_upgrade_550_termmeta( $wp_db_version, $wp_current_db_version ) {
+	if ( $wp_db_version >= 34370 && $wp_current_db_version < 34370 ) {
+		if ( acf_version_compare( acf_get_db_version(), '>', '5.5.0' ) ) {
+			acf_upgrade_550_termmeta();
+		}
+	}
+}
+add_action( 'wp_upgrade', 'acf_wp_upgrade_550_termmeta', 10, 2 );
+
+/**
+ *  acf_upgrade_550_taxonomy
+ *
+ *  Upgrades all ACF4 termmeta for a specific taxonomy.
+ *
+ *  @date    24/8/18
+ *  @since   5.7.4
+ *
+ *  @param   string $taxonomy The taxonomy name.
+ *  @return  void
+ */
+function acf_upgrade_550_taxonomy( $taxonomy ) {
+
+	// log
+	acf_dev_log( 'ACF Upgrade 5.5.0 Taxonomy.', $taxonomy );
+
+	// global
+	global $wpdb;
+
+	// vars
+	$search  = $taxonomy . '_%';
+	$_search = '_' . $search;
+
+	// escape '_'
+	// http://stackoverflow.com/questions/2300285/how-do-i-escape-in-sql-server
+	$search  = str_replace( '_', '\_', $search );
+	$_search = str_replace( '_', '\_', $_search );
+
+	// search
+	// results show faster query times using 2 LIKE vs 2 wildcards
+	$rows = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT * 
+		FROM $wpdb->options 
+		WHERE option_name LIKE %s 
+		OR option_name LIKE %s",
+			$search,
+			$_search
+		),
+		ARRAY_A
+	);
+
+	// loop
+	if ( $rows ) {
+		foreach ( $rows as $row ) {
+
+			/*
+			Use regex to find "(_)taxonomy_(term_id)_(field_name)" and populate $matches:
+			Array
+			(
+			[0] => _category_3_color
+			[1] => _
+			[2] => 3
+			[3] => color
+			)
+			*/
+			if ( ! preg_match( "/^(_?){$taxonomy}_(\d+)_(.+)/", $row['option_name'], $matches ) ) {
+				continue;
+			}
+
+			// vars
+			$term_id    = $matches[2];
+			$meta_key   = $matches[1] . $matches[3];
+			$meta_value = $row['option_value'];
+
+			// update
+			// memory usage reduced by 50% by using a manual insert vs update_metadata() function.
+			// update_metadata( 'term', $term_id, $meta_name, $meta_value );
+			$wpdb->insert(
+				$wpdb->termmeta,
+				array(
+					'term_id'    => $term_id,
+					'meta_key'   => $meta_key,
+					'meta_value' => $meta_value,
+				)
+			);
+
+			// log
+			acf_dev_log( 'ACF Upgrade 5.5.0 Term.', $term_id, $meta_key );
+
+			// action
+			do_action( 'acf/upgrade_550_taxonomy_term', $term_id );
+		}
+	}
+
+	// action for 3rd party
+	do_action( 'acf/upgrade_550_taxonomy', $taxonomy );
+}

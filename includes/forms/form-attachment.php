@@ -1,179 +1,236 @@
 <?php
 
-if(!defined('ABSPATH'))
-    exit;
+/*
+*  ACF Attachment Form Class
+*
+*  All the logic for adding fields to attachments
+*
+*  @class       acf_form_attachment
+*  @package     ACF
+*  @subpackage  Forms
+*/
 
-if(!class_exists('acfe_screen_attachment')):
+if ( ! class_exists( 'acf_form_attachment' ) ) :
 
-class acfe_screen_attachment{
-    
-    // vars
-    var $post_id;
-    
-    /*
-     * Construct
-     */
-    function __construct(){
-    
-        /*
-         * acfe/load_attachments
-         * acfe/add_attachments_meta_boxes
-         */
-        
-        // list
-        add_action('load-upload.php',       array($this, 'attachments_load'));
-        
-    }
+	class acf_form_attachment {
 
-    /*
-     * Attachments: Load
-     */
-    function attachments_load(){
-        
-        // actions
-        do_action("acfe/load_attachments");
-    
-        // hooks
-        add_action('admin_footer', array($this, 'attachments_footer'));
-        
-    }
-    
-    /*
-     * Attachments: Footer
-     */
-    function attachments_footer(){
-        
-        do_action('acfe/add_attachments_meta_boxes', 'attachment');
-    
-        $this->attachments_do_meta_boxes();
-        
-    }
-    
-    /*
-     * Attachments: Do Meta Boxes
-     */
-    function attachments_do_meta_boxes(){
-        
-        // check filter
-        if(!acf_is_filter_enabled('acfe/attachment_list')){
-            return;
-        }
-        
-        // mode (list/grid)
-        // source: wp-admin/upload.php:16
-        $mode  = get_user_option('media_library_mode', get_current_user_id()) ? get_user_option('media_library_mode', get_current_user_id()) : 'grid';
-        $modes = array('grid', 'list');
-    
-        if(isset($_GET['mode']) && in_array($_GET['mode'], $modes, true)){
-            $mode = $_GET['mode'];
-        }
-        
-        // enqueue
-        acf_enqueue_scripts();
-        
-        ?>
-        <template id="tmpl-acf-after-title">
+		/*
+		*  __construct
+		*
+		*  This function will setup the class functionality
+		*
+		*  @type    function
+		*  @date    5/03/2014
+		*  @since   5.0.0
+		*
+		*  @param   n/a
+		*  @return  n/a
+		*/
 
-            <div id="poststuff" class="acfe-list-postboxes">
-                <form method="post">
-                    <?php do_meta_boxes('edit', 'acf_after_title', 'attachment'); ?>
-                </form>
-            </div>
+		function __construct() {
 
-        </template>
-        
-        <template id="tmpl-acf-normal">
+			// actions
+			add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ) );
 
-            <div id="poststuff" class="acfe-list-postboxes">
-                <form method="post">
-                    <?php do_meta_boxes('edit', 'normal', 'attachment'); ?>
-                </form>
-            </div>
+			// render
+			add_filter( 'attachment_fields_to_edit', array( $this, 'edit_attachment' ), 10, 2 );
 
-        </template>
-        
-        <template id="tmpl-acf-side">
+			// save
+			add_filter( 'attachment_fields_to_save', array( $this, 'save_attachment' ), 10, 2 );
 
-            <div class="acf-column-2">
+		}
 
-                <div id="poststuff" class="acfe-list-postboxes -side">
-                    <form method="post">
-                        <?php do_meta_boxes('edit', 'side', 'attachment'); ?>
-                    </form>
-                </div>
 
-            </div>
+		/*
+		*  admin_enqueue_scripts
+		*
+		*  This action is run after post query but before any admin script / head actions.
+		*  It is a good place to register all actions.
+		*
+		*  @type    action (admin_enqueue_scripts)
+		*  @date    26/01/13
+		*  @since   3.6.0
+		*
+		*  @param   N/A
+		*  @return  N/A
+		*/
 
-        </template>
-        <script type="text/javascript">
-        (function($){
-            
-            <?php if($mode === 'list'): ?>
-            
-                // main form
-                var $main = $('#posts-filter');
+		function admin_enqueue_scripts() {
 
-                $main.wrap('<div class="acf-columns-2" />');
-                $main.prepend($('.subsubsub'));
-                $main.wrap('<div class="acf-column-1" />');
-    
-                // field groups
-                var $column_1 = $('.acf-column-1');
-                
-                $column_1.prepend($('#tmpl-acf-after-title').html());
-                $column_1.append($('#tmpl-acf-normal').html());
-                $column_1.after($('#tmpl-acf-side').html());
-        
-                <?php if(!acf_is_filter_enabled('acfe/attachment_list/side')): ?>
-                    $('.acf-columns-2').removeClass('acf-columns-2');
-                <?php endif; ?>
-            
-            <?php elseif($mode === 'grid'): ?>
-            
-                
-                
-                // wait for media grid to load
-                acf.addAction('load', function(){
+			// bail early if not valid screen
+			if ( ! acf_is_screen( array( 'attachment', 'upload' ) ) ) {
+				return;
+			}
 
-                    // media frame
-                    var $main = $('.media-frame');
+			// load acf scripts
+			acf_enqueue_scripts(
+				array(
+					'uploader' => true,
+				)
+			);
 
-                    $main.wrap('<div class="acf-columns-2" />');
-                    $main.wrap('<div class="acf-column-1" />');
+			// actions
+			if ( acf_is_screen( 'upload' ) ) {
+				add_action( 'admin_footer', array( $this, 'admin_footer' ), 0 );
+			}
+		}
 
-                    // field groups
-                    var $column_1 = $('.acf-column-1');
 
-                    $column_1.prepend($('#tmpl-acf-after-title').html());
-                    $column_1.append($('#tmpl-acf-normal').html());
-                    $column_1.after($('#tmpl-acf-side').html());
-                    
-                    <?php if(!acf_is_filter_enabled('acfe/attachment_list/side')): ?>
-                        $('.acf-columns-2').removeClass('acf-columns-2');
-                    <?php endif; ?>
-                    
-                    // fix dev mode bulk actions
-                    var $acfWrap = $('#acfe-acf-custom-fields');
-                    var $wpWrap = $('#acfe-wp-custom-fields');
+		/*
+		*  admin_footer
+		*
+		*  This function will add acf_form_data to the WP 4.0 attachment grid
+		*
+		*  @type    action (admin_footer)
+		*  @date    11/09/2014
+		*  @since   5.0.0
+		*
+		*  @param   n/a
+		*  @return  n/a
+		*/
 
-                    // move Bulk Button
-                    $acfWrap.find('.tablenav.bottom').insertAfter($acfWrap);
-                    $wpWrap.find('.tablenav.bottom').insertAfter($wpWrap);
-                    
-                    // re-initialize postboxes
-                    (acf.get('postboxes') || []).map(acf.newPostbox);
-                    
-                });
-            
-            <?php endif; ?>
+		function admin_footer() {
 
-        })(jQuery);
-        </script>
-        <?php
-    }
-    
-}
+			// render post data
+			acf_form_data(
+				array(
+					'screen'  => 'attachment',
+					'post_id' => 0,
+				)
+			);
 
-new acfe_screen_attachment();
+			?>
+<script type="text/javascript">
+	
+// WP saves attachment on any input change, so unload is not needed
+acf.unload.active = 0;
+
+</script>
+			<?php
+
+		}
+
+
+		/*
+		*  edit_attachment
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function edit_attachment( $form_fields, $post ) {
+
+			// vars
+			$is_page = acf_is_screen( 'attachment' );
+			$post_id = $post->ID;
+			$el      = 'tr';
+
+			// get field groups
+			$field_groups = acf_get_field_groups(
+				array(
+					'attachment_id' => $post_id,
+					'attachment'    => $post_id, // Leave for backwards compatibility
+				)
+			);
+
+			// render
+			if ( ! empty( $field_groups ) ) {
+
+				// get acf_form_data
+				ob_start();
+
+				acf_form_data(
+					array(
+						'screen'  => 'attachment',
+						'post_id' => $post_id,
+					)
+				);
+
+				// open
+				echo '</td></tr>';
+
+				// loop
+				foreach ( $field_groups as $field_group ) {
+
+						// load fields
+						$fields = acf_get_fields( $field_group );
+
+						// override instruction placement for modal
+					if ( ! $is_page ) {
+
+						$field_group['instruction_placement'] = 'field';
+					}
+
+						// render
+						acf_render_fields( $fields, $post_id, $el, $field_group['instruction_placement'] );
+
+				}
+
+				// close
+				echo '<tr class="compat-field-acf-blank"><td>';
+
+				$html = ob_get_contents();
+
+				ob_end_clean();
+
+				$form_fields['acf-form-data'] = array(
+					'label' => '',
+					'input' => 'html',
+					'html'  => $html,
+				);
+
+			}
+
+			// return
+			return $form_fields;
+
+		}
+
+
+		/*
+		*  save_attachment
+		*
+		*  description
+		*
+		*  @type    function
+		*  @date    8/10/13
+		*  @since   5.0.0
+		*
+		*  @param   $post_id (int)
+		*  @return  $post_id (int)
+		*/
+
+		function save_attachment( $post, $attachment ) {
+
+			// bail early if not valid nonce
+			if ( ! acf_verify_nonce( 'attachment' ) ) {
+				return $post;
+			}
+
+			// bypass validation for ajax
+			if ( acf_is_ajax( 'save-attachment-compat' ) ) {
+				acf_save_post( $post['ID'] );
+
+				// validate and save
+			} elseif ( acf_validate_save_post( true ) ) {
+				acf_save_post( $post['ID'] );
+			}
+
+			// return
+			return $post;
+		}
+
+
+	}
+
+	new acf_form_attachment();
 
 endif;
+
+?>
